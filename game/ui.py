@@ -1,15 +1,17 @@
-"""
+﻿"""
 Módulo de Interface do Usuário (UI) para 'O Desafio Escolar'.
-Renderiza menus, caixas de diálogo, telas de quiz e tela de vitória via PyOpenGL.
+Renderiza menus, diálogos, quiz com combate e telas de vitória via PyOpenGL.
 """
 
+import math
+import random
 import pygame
 from game.config import (
     WINDOW_WIDTH, WINDOW_HEIGHT,
     COLOR_PRIMARY, COLOR_PRIMARY_DARK, COLOR_ACCENT, COLOR_ACCENT_DARK,
     COLOR_SUCCESS, COLOR_DANGER, COLOR_WHITE, COLOR_TEXT, COLOR_TEXT_MUTED,
     COLOR_BG_TOP, COLOR_BG_BOTTOM,
-    DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL, DIFFICULTY_LABELS
+    DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL, DIFF_DESAFIO, DIFFICULTY_LABELS, SUBJECTS
 )
 
 class UIManager:
@@ -18,150 +20,143 @@ class UIManager:
         self.assets = assets
         self.sound = sound_manager
 
-        # Estado da tela de Nome
         self.player_name_input = ""
+        self.selected_gender = "masculino"  # masculino/feminino
         self.cursor_timer = 0.0
 
-        # Estado do Diálogo
         self.dialog_active = False
         self.dialog_title = ""
         self.dialog_lines = []
-        self.dialog_options = [] # Lista de tuplas (texto, callback)
+        self.dialog_options = []
         self.dialog_selected_opt = 0
         self.dialog_is_notice = False
 
-        # Estado do Quiz
-        self.quiz_buttons = [] # Lista de rects para mouse hover/click
+        self.quiz_buttons = []
         self.hovered_option = -1
         self.feedback_active = False
         self.feedback_correct = False
         self.feedback_text = ""
 
-    # =========================================================================
-    # 1. TELA DE CRIAÇÃO / NOME DO ESTUDANTE
-    # =========================================================================
+        self._victory_particles = []
+        self._victory_seeded = False
+
     def handle_name_input_event(self, event):
-        """Gerencia digitação do nome do jogador."""
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
+            if event.key in (pygame.K_TAB, pygame.K_LEFT, pygame.K_RIGHT):
+                self.selected_gender = "feminino" if self.selected_gender == "masculino" else "masculino"
+                self.sound.play("blip")
+            elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
                 name = self.player_name_input.strip()
                 if not name:
                     name = "Estudante"
                 self.sound.play("blip")
-                return name
+                return (name, self.selected_gender)
             elif event.key == pygame.K_BACKSPACE:
                 if len(self.player_name_input) > 0:
                     self.player_name_input = self.player_name_input[:-1]
                     self.sound.play("blip")
             else:
-                # Permite letras, números e espaços até 16 caracteres
-                if len(self.player_name_input) < 16 and (event.unicode.isalnum() or event.unicode in " _-"):
+                if len(event.unicode) > 0 and event.unicode.isprintable() and len(self.player_name_input) < 18:
                     self.player_name_input += event.unicode
                     self.sound.play("blip")
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = pygame.mouse.get_pos()
+            pw, ph = 680, 420
+            px = (WINDOW_WIDTH - pw) / 2
+            py = (WINDOW_HEIGHT - ph) / 2
+            mrect = pygame.Rect(px + 170, py + 270, 150, 36)
+            frect = pygame.Rect(px + 360, py + 270, 150, 36)
+            if mrect.collidepoint(mx, my):
+                self.selected_gender = "masculino"; self.sound.play("blip")
+            elif frect.collidepoint(mx, my):
+                self.selected_gender = "feminino"; self.sound.play("blip")
         return None
 
     def draw_name_input_screen(self, dt):
-        """Renderiza a tela inicial de boas-vindas e inserção do nome."""
         self.cursor_timer += dt
-
-        # Fundo com degradê suave
         self.gl.clear(COLOR_BG_BOTTOM)
         self.gl.draw_vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, COLOR_BG_TOP, COLOR_BG_BOTTOM)
+        self.gl.draw_vignette(60)
 
-        # Painel central principal
-        pw, ph = 640, 380
+        pw, ph = 680, 420
         px = (WINDOW_WIDTH - pw) / 2
         py = (WINDOW_HEIGHT - ph) / 2
 
         self.gl.draw_panel(px, py, pw, ph, (26, 32, 48, 245), border_color=(70, 96, 138), border_width=3, radius=18)
         self.gl.draw_panel(px + 5, py + 5, pw - 10, ph - 10, (0, 0, 0, 0), border_color=(48, 68, 100), border_width=1, radius=14, shadow=False)
-
-        # Faixa dourada decorativa no topo do painel
         self.gl.draw_rounded_rect(px + 40, py - 3, pw - 80, 6, COLOR_ACCENT, radius=3)
 
-        # Cabeçalho da Faculdade e Matéria
-        self.gl.draw_text("FUPAC / UNIPAC - FUNDAÇÃO PRESIDENTE ANTÔNIO CARLOS", WINDOW_WIDTH / 2, py + 22, color=(160, 185, 220), size=14, center_x=True)
-        self.gl.draw_text("Ciência da Computação | Programação Para Jogos", WINDOW_WIDTH / 2, py + 40, color=(120, 145, 180), size=12, center_x=True)
+        self.gl.draw_text("O DESAFIO ESCOLAR", WINDOW_WIDTH / 2, py + 40, color=COLOR_ACCENT, size=34, bold=True, center_x=True)
+        self.gl.draw_text("Digite seu nome, escolha seu personagem e comece a jornada!", WINDOW_WIDTH / 2, py + 90, color=(180, 220, 255), size=15, center_x=True)
 
-        # Título do Jogo
-        self.gl.draw_text("O DESAFIO ESCOLAR", WINDOW_WIDTH / 2, py + 72, color=COLOR_ACCENT, size=32, bold=True, center_x=True)
-        self.gl.draw_text("Equipe Pecê Gamer", WINDOW_WIDTH / 2, py + 108, color=(180, 200, 225), size=14, center_x=True)
-
-        # Linha divisória
-        self.gl.draw_rect(px + 40, py + 130, pw - 80, 2, (50, 70, 100, 160))
-
-        # Instrução
-        self.gl.draw_text("Boas-vindas à escola!", WINDOW_WIDTH / 2, py + 150, color=COLOR_WHITE, size=20, bold=True, center_x=True)
-        self.gl.draw_text("Digite seu nome de estudante para iniciar sua jornada acadêmica:", WINDOW_WIDTH / 2, py + 180, color=COLOR_TEXT_MUTED, size=15, center_x=True)
-
-        # Campo de Texto para o Nome
-        bx, by, bw, bh = px + 120, py + 215, 400, 48
+        bx, by, bw, bh = px + 140, py + 140, 400, 50
         self.gl.draw_panel(bx, by, bw, bh, (16, 19, 30), border_color=COLOR_PRIMARY, border_width=2, radius=10, shadow=False)
 
-        # Texto digitado + Cursor piscante
         display_text = self.player_name_input
         show_cursor = (int(self.cursor_timer * 2.5) % 2 == 0)
         cursor_str = "|" if show_cursor else " "
-
         if not display_text and not show_cursor:
-            self.gl.draw_text("Ex: Lucas, Daniel, Matheus...", bx + 16, by + 14, color=(90, 105, 130), size=18)
+            self.gl.draw_text("Digite seu nome...", bx + 16, by + 15, color=(90, 105, 130), size=18)
         else:
-            self.gl.draw_text(display_text + cursor_str, bx + 16, by + 14, color=COLOR_WHITE, size=20, bold=True)
+            self.gl.draw_text(display_text + cursor_str, bx + 16, by + 15, color=COLOR_WHITE, size=20, bold=True)
 
-        # Dica de tecla Enter
-        self.gl.draw_panel(px + 170, py + 295, 300, 36, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=1, radius=8, shadow_offset=(2, 3))
-        self.gl.draw_text("Pressione [ENTER] para Jogar", WINDOW_WIDTH / 2, py + 304, color=COLOR_WHITE, size=15, bold=True, center_x=True)
+        self.gl.draw_text("Escolha seu personagem:", WINDOW_WIDTH / 2, py + 235, color=COLOR_WHITE, size=16, bold=True, center_x=True)
+        msel = self.selected_gender == "masculino"
+        fsel = self.selected_gender == "feminino"
+        self.gl.draw_panel(px + 170, py + 270, 150, 36, COLOR_PRIMARY_DARK if msel else (35,45,60), border_color=COLOR_ACCENT if msel else (70,90,120), border_width=2 if msel else 1, radius=8, shadow_offset=(2,3))
+        self.gl.draw_text("Homem", px + 245, py + 279, color=COLOR_WHITE, size=15, bold=True, center_x=True)
+        self.gl.draw_panel(px + 360, py + 270, 150, 36, COLOR_PRIMARY_DARK if fsel else (35,45,60), border_color=COLOR_ACCENT if fsel else (70,90,120), border_width=2 if fsel else 1, radius=8, shadow_offset=(2,3))
+        self.gl.draw_text("Mulher", px + 435, py + 279, color=COLOR_WHITE, size=15, bold=True, center_x=True)
+        self.gl.draw_text("[TAB/<- ->] alterna | clique para escolher", WINDOW_WIDTH / 2, py + 318, color=COLOR_TEXT_MUTED, size=13, center_x=True)
 
-        # Rodapé com créditos
-        self.gl.draw_text("Autores: Angelo, Daniel, Hamilton, João Alberto, Lucas E., Lucas N., Matheus | Prof. Rodrigo Fernandes", WINDOW_WIDTH / 2, WINDOW_HEIGHT - 24, color=(100, 115, 140), size=12, center_x=True)
+        self.gl.draw_panel(px + 190, py + 340, 300, 36, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=1, radius=8, shadow_offset=(2, 3))
+        self.gl.draw_text("Pressione [ENTER] para Jogar", WINDOW_WIDTH / 2, py + 349, color=COLOR_WHITE, size=15, bold=True, center_x=True)
+        self.gl.draw_text("Você tem 3 corações. A cada erro, perde 1. Sem corações, sua pontuação é salva!", WINDOW_WIDTH / 2, py + 388, color=(255, 200, 200), size=13, center_x=True)
 
-    # =========================================================================
-    # 2. HUD DE EXPLORAÇÃO
-    # =========================================================================
-    def draw_exploration_hud(self, player_name, location_name, quiz_mgr, interactable):
-        """Renderiza crachá do aluno, status das salas e indicador de interação."""
-        # 1. Crachá do Estudante (Canto Superior Esquerdo)
-        self.gl.draw_panel(16, 16, 260, 52, (20, 26, 40, 235), border_color=(64, 86, 118), border_width=2, radius=14, shadow_offset=(3, 4))
-        # Avatar circular com iniciais
-        self.gl.draw_circle(42, 42, 19, (36, 48, 70))
-        self.gl.draw_circle(42, 42, 19, COLOR_PRIMARY, filled=False, border_width=2)
-        self.gl.draw_text(player_name[:1].upper() if player_name else "A", 42, 32, color=COLOR_ACCENT, size=20, bold=True, center_x=True)
-        # Nome e Sala atual
-        self.gl.draw_text(f"Estudante: {player_name}", 70, 22, color=COLOR_WHITE, size=15, bold=True)
-        self.gl.draw_text(f"Local: {location_name}", 70, 42, color=(150, 200, 255), size=13)
+    def draw_exploration_hud(self, player_name, location_name, quiz_mgr, interactable, score_mgr=None):
+        self.gl.draw_panel(16, 16, 360, 66, (20, 26, 40, 235), border_color=(64, 86, 118), border_width=2, radius=14, shadow_offset=(3, 4))
+        self.gl.draw_circle(44, 44, 20, (36, 48, 70))
+        self.gl.draw_circle(44, 44, 20, COLOR_PRIMARY, filled=False, border_width=2)
+        self.gl.draw_text(player_name[:1].upper() if player_name else "A", 44, 33, color=COLOR_ACCENT, size=20, bold=True, center_x=True)
+        self.gl.draw_text(f"Estudante: {player_name}", 74, 22, color=COLOR_WHITE, size=15, bold=True)
+        self.gl.draw_text(f"Local: {location_name}", 74, 43, color=(150, 200, 255), size=13)
+        if score_mgr is not None:
+            hearts = getattr(score_mgr, "hearts", 0)
+            score = getattr(score_mgr, "score", 0)
+            hx = 240
+            for i in range(3):
+                col = COLOR_DANGER if i < hearts else (80,80,90)
+                self.gl.draw_text("♥", hx + i*18, 22, color=col, size=18, bold=True)
+            self.gl.draw_text(f"Pts: {score}", 240, 45, color=COLOR_ACCENT, size=13, bold=True)
 
-        # 2. Status de Desafio em Matemática (Canto Superior Direito)
-        self.gl.draw_panel(WINDOW_WIDTH - 280, 16, 264, 52, (20, 26, 40, 235), border_color=(64, 86, 118), border_width=2, radius=14, shadow_offset=(3, 4))
-        self.gl.draw_text("Matemática:", WINDOW_WIDTH - 270, 22, color=COLOR_ACCENT, size=14, bold=True)
+        subj_name = quiz_mgr.subject_name() if hasattr(quiz_mgr, "subject_name") else "Matemática"
+        self.gl.draw_panel(WINDOW_WIDTH - 325, 16, 309, 56, (20, 26, 40, 235), border_color=(64, 86, 118), border_width=2, radius=14, shadow_offset=(3, 4))
+        self.gl.draw_text(f"Progresso: {subj_name}", WINDOW_WIDTH - 310, 22, color=COLOR_ACCENT, size=14, bold=True)
 
-        # Indicadores dos 3 níveis: Fácil, Médio, Difícil
         diffs = [
             (DIFF_FACIL, "Fácil", 0),
-            (DIFF_MEDIO, "Médio", 56),
-            (DIFF_DIFICIL, "Difícil", 116)
+            (DIFF_MEDIO, "Médio", 52),
+            (DIFF_DIFICIL, "Difícil", 106),
+            (DIFF_DESAFIO, "Desafio", 166)
         ]
-        base_x = WINDOW_WIDTH - 180
+        base_x = WINDOW_WIDTH - 306
         for d_key, label, offset_x in diffs:
             completed = quiz_mgr.completed_levels.get(d_key, False)
             unlocked = quiz_mgr.unlocked_levels.get(d_key, False)
-
             icon_key = "star" if completed else ("lock_open" if unlocked else "lock_closed")
             color_text = COLOR_SUCCESS if completed else (COLOR_WHITE if unlocked else COLOR_TEXT_MUTED)
+            self.gl.draw_texture(self.assets.textures[icon_key], base_x + offset_x, 38, 18, 18)
+            self.gl.draw_text(label, base_x + offset_x + 22, 41, color=color_text, size=11, bold=True)
 
-            self.gl.draw_texture(self.assets.textures[icon_key], base_x + offset_x, 20, 18, 18)
-            self.gl.draw_text(label, base_x + offset_x + 9, 41, color=color_text, size=11, bold=True, center_x=True)
-
-        # 3. Balão flutuante de interação no rodapé/centro
         if interactable is not None:
-            bw, bh = 340, 36
+            pulse = 2 if (pygame.time.get_ticks() // 350) % 2 == 0 else 0
+            bw, bh = 420 + pulse * 2, 40
             bx = (WINDOW_WIDTH - bw) / 2
-            by = WINDOW_HEIGHT - 60
+            by = WINDOW_HEIGHT - 64
+            self.gl.draw_glow_rect(bx, by, bw, bh, (247, 201, 72, 60), layers=3, spread=4)
             self.gl.draw_panel(bx, by, bw, bh, (255, 245, 180, 245), border_color=COLOR_ACCENT_DARK, border_width=2, radius=18, shadow_offset=(2, 4))
-            self.gl.draw_text(f"[E ou ESPAÇO] {interactable.label}", WINDOW_WIDTH / 2, by + 8, color=(30, 35, 45), size=15, bold=True, center_x=True)
+            self.gl.draw_text(f"[E / ESPAÇO] {interactable.label}", WINDOW_WIDTH / 2, by + 10, color=(30, 35, 45), size=15, bold=True, center_x=True)
 
-    # =========================================================================
-    # 3. SISTEMA DE DIÁLOGO E AVISOS
-    # =========================================================================
     def show_dialog(self, title, lines, options=None, is_notice=False):
         self.dialog_active = True
         self.dialog_title = title
@@ -201,43 +196,31 @@ class UIManager:
         if not self.dialog_active:
             return
 
-        # Painel inferior de diálogo estilo RPG
-        pw = 740
-        ph = 160 if not self.dialog_options else 200
+        pw = 780
+        ph = 165 if not self.dialog_options else 220
         px = (WINDOW_WIDTH - pw) / 2
         py = WINDOW_HEIGHT - ph - 24
 
         self.gl.draw_panel(px, py, pw, ph, (20, 26, 42, 248), border_color=COLOR_PRIMARY, border_width=3, radius=16, shadow_offset=(4, 5))
         self.gl.draw_panel(px + 5, py + 5, pw - 10, ph - 10, (0, 0, 0, 0), border_color=(62, 92, 140), border_width=1, radius=12, shadow=False)
-
-        # Título / Nome do Interlocutor
-        self.gl.draw_panel(px + 20, py - 14, 240, 28, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=1, radius=8, shadow_offset=(2, 3))
+        self.gl.draw_panel(px + 20, py - 14, 280, 28, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=1, radius=8, shadow_offset=(2, 3))
         self.gl.draw_text(self.dialog_title, px + 30, py - 8, color=COLOR_WHITE, size=14, bold=True)
 
-        # Linhas de Texto do Diálogo
         for i, line in enumerate(self.dialog_lines):
             self.gl.draw_text(line, px + 30, py + 26 + i * 22, color=COLOR_TEXT, size=15)
 
-        # Opções de Resposta
         if self.dialog_options:
-            start_y = py + 34 + len(self.dialog_lines) * 22
+            start_y = py + 36 + len(self.dialog_lines) * 22
             for idx, (opt_text, _) in enumerate(self.dialog_options):
                 is_selected = (idx == self.dialog_selected_opt)
                 opt_color = COLOR_ACCENT if is_selected else COLOR_WHITE
                 prefix = "> " if is_selected else "  "
-
-                # Destaque de linha selecionada
                 if is_selected:
                     self.gl.draw_panel(px + 26, start_y + idx * 26 - 2, pw - 52, 24, (45, 65, 100, 210), border_color=COLOR_ACCENT, border_width=1, radius=6, shadow=False)
-
                 self.gl.draw_text(prefix + opt_text, px + 30, start_y + idx * 26 + 1, color=opt_color, size=14, bold=is_selected)
         elif self.dialog_is_notice:
-            # Instrução de fechar
             self.gl.draw_text("[Pressione E ou ESPAÇO para fechar]", px + pw - 250, py + ph - 26, color=COLOR_ACCENT, size=13)
 
-    # =========================================================================
-    # 4. SISTEMA DE QUIZ PROGRESSIVO
-    # =========================================================================
     def start_quiz_feedback(self, is_correct, explanation):
         self.feedback_active = True
         self.feedback_correct = is_correct
@@ -248,25 +231,37 @@ class UIManager:
             self.sound.play("wrong")
 
     def handle_quiz_event(self, event, quiz_mgr):
-        """Gerencia seleção de alternativas por teclado ou mouse."""
         if self.feedback_active:
             if event.type == pygame.KEYDOWN and event.key in [pygame.K_RETURN, pygame.K_SPACE, pygame.K_e]:
                 self.feedback_active = False
+                # Se errou e ficou sem energia, encerra a tentativa
+                if (not self.feedback_correct) and getattr(quiz_mgr, "in_combat", False) and getattr(quiz_mgr, "player_hp", 1) <= 0:
+                    quiz_mgr.end_combat()
+                    return "COMBAT_DEFEAT"
+
                 if self.feedback_correct:
-                    # Acertou: avança
+                    # Se estava em combate, só avança a questão quando o inimigo for derrotado
+                    if getattr(quiz_mgr, "in_combat", False) and getattr(quiz_mgr, "enemy_hp", 0) > 0:
+                        quiz_mgr.retry_question()  # nova tentativa de ataque na mesma questão
+                        return "REFRESH"
+
                     finished_level = quiz_mgr.advance_question()
                     if finished_level:
-                        self.sound.play("fanfare")
+                        self.sound.play("levelup")
+                        # vitória geral de matemática abre certificado
                         if quiz_mgr.is_game_completed():
+                            self.sound.play("fanfare")
                             return "VICTORY"
+                        # se completou a matéria atual (nível difícil)
+                        if quiz_mgr.is_subject_completed(quiz_mgr.current_subject):
+                            return "SUBJECT_COMPLETE"
                         return "LEVEL_COMPLETE"
                 else:
-                    # Errou: "estudar mais um pouco" e tentar de novo
+                    # errou: permanece em combate, tenta responder novamente
                     quiz_mgr.retry_question()
                 return "REFRESH"
             return None
 
-        # Teclado para opções 1, 2, 3, 4 ou A, B, C, D
         if event.type == pygame.KEYDOWN:
             key_map = {
                 pygame.K_1: 0, pygame.K_a: 0,
@@ -276,224 +271,320 @@ class UIManager:
             }
             if event.key in key_map:
                 opt_idx = key_map[event.key]
+                self.sound.play("select")
                 return f"ANSWER_{opt_idx}"
             elif event.key == pygame.K_ESCAPE:
                 return "EXIT_QUIZ"
 
-        # Clique do Mouse
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = pygame.mouse.get_pos()
-            # Checa clique nas abas de dificuldade
             for rect, d_key in getattr(self, "diff_buttons", []):
                 if rect.collidepoint(mx, my) and quiz_mgr.unlocked_levels.get(d_key, False):
                     self.sound.play("blip")
                     return f"SWITCH_DIFF_{d_key}"
-
-            # Checa clique nas alternativas
             for idx, rect in enumerate(self.quiz_buttons):
                 if rect.collidepoint(mx, my):
+                    self.sound.play("select")
                     return f"ANSWER_{idx}"
 
-        # Movimento do Mouse (Hover)
         if event.type == pygame.MOUSEMOTION:
             mx, my = pygame.mouse.get_pos()
+            prev = self.hovered_option
             self.hovered_option = -1
             for idx, rect in enumerate(self.quiz_buttons):
                 if rect.collidepoint(mx, my):
                     self.hovered_option = idx
                     break
+            if self.hovered_option != -1 and self.hovered_option != prev:
+                self.sound.play("blip")
 
         return None
 
-    def draw_quiz(self, quiz_mgr, student_name):
-        """Renderiza a interface do quiz de matemática."""
+    def _wrap_text(self, text, max_chars):
+        words = str(text).split()
+        lines = [""]
+        for w in words:
+            if len(lines[-1]) + len(w) + 1 <= max_chars:
+                lines[-1] = (lines[-1] + " " + w).strip()
+            else:
+                lines.append(w)
+        return [l for l in lines if l]
+
+    def _draw_hp_bar(self, x, y, w, h, hp, max_hp, color, label):
+        self.gl.draw_text(label, x, y - 16, color=COLOR_WHITE, size=12, bold=True)
+        self.gl.draw_rounded_rect(x, y, w, h, (45, 50, 65), radius=6)
+        ratio = 0 if max_hp <= 0 else max(0.0, min(1.0, hp / max_hp))
+        if ratio > 0:
+            self.gl.draw_rounded_rect(x, y, int(w * ratio), h, color, radius=6)
+        self.gl.draw_rounded_rect(x, y, w, h, (90, 100, 120), radius=6, filled=False, border_width=1)
+        self.gl.draw_text(f"{hp}/{max_hp}", x + w / 2, y - 1, color=COLOR_WHITE, size=12, bold=True, center_x=True)
+
+    def draw_quiz(self, quiz_mgr, student_name, score_mgr=None):
         self.gl.clear((16, 20, 32))
-        self.gl.draw_vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, (26, 33, 50), (16, 20, 32))
+        self.gl.draw_vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, (30, 40, 64), (14, 18, 30))
+        self.gl.draw_vignette(70)
 
-        # Painel Superior: Seletor e Status das Dificuldades
-        self.gl.draw_panel(20, 16, WINDOW_WIDTH - 40, 56, (28, 36, 54), border_color=(64, 86, 122), border_width=2, radius=14, shadow_offset=(3, 4))
-        self.gl.draw_text("SALA DE MATEMÁTICA - AVALIAÇÃO PROGRESSIVA", 40, 26, color=COLOR_WHITE, size=18, bold=True)
-        self.gl.draw_text(f"Estudante: {student_name}", 40, 48, color=(160, 200, 255), size=13)
+        subject_name = quiz_mgr.subject_name() if hasattr(quiz_mgr, "subject_name") else "Matemática"
+        self.gl.draw_panel(20, 16, WINDOW_WIDTH - 40, 60, (28, 36, 54, 245), border_color=(64, 86, 122), border_width=2, radius=14, shadow_offset=(3, 4))
+        self.gl.draw_text(f"SALA DE {subject_name.upper()} - DESAFIO PROGRESSIVO", 40, 26, color=COLOR_WHITE, size=18, bold=True)
+        extra = ""
+        if score_mgr is not None:
+            hearts = "♥"*getattr(score_mgr,"hearts",0) + "♡"*(3-getattr(score_mgr,"hearts",0))
+            extra = f"   Vidas: {hearts}   Pontos: {getattr(score_mgr,"score",0)}   Acertos: {getattr(score_mgr,"correct",0)}  Erros: {getattr(score_mgr,"wrong",0)}"
+        self.gl.draw_text(f"Estudante: {student_name}{extra}", 40, 49, color=(160, 200, 255), size=13)
 
-        # Botões das 3 Dificuldades
         self.diff_buttons = []
         diff_info = [
-            (DIFF_FACIL, "1. Fácil", 480),
-            (DIFF_MEDIO, "2. Médio", 630),
-            (DIFF_DIFICIL, "3. Difícil", 780)
+            (DIFF_FACIL, "1.Fácil", 430),
+            (DIFF_MEDIO, "2.Médio", 548),
+            (DIFF_DIFICIL, "3.Difícil", 666),
+            (DIFF_DESAFIO, "4.Desafio", 784)
         ]
         for d_key, label, bx in diff_info:
             is_cur = (quiz_mgr.current_difficulty == d_key)
             unlocked = quiz_mgr.unlocked_levels.get(d_key, False)
             completed = quiz_mgr.completed_levels.get(d_key, False)
-
             bg_col = COLOR_PRIMARY_DARK if is_cur else ((35, 48, 70) if unlocked else (25, 30, 42))
             border_col = COLOR_ACCENT if is_cur else (COLOR_PRIMARY if unlocked else (50, 60, 75))
-
-            btn_rect = pygame.Rect(bx, 24, 130, 40)
+            btn_w = 110 if d_key != DIFF_DESAFIO else 132
+            btn_rect = pygame.Rect(bx, 24, btn_w, 40)
             self.diff_buttons.append((btn_rect, d_key))
-
-            self.gl.draw_panel(bx, 24, 130, 40, bg_col, border_color=border_col, border_width=2 if is_cur else 1, radius=10, shadow_offset=(2, 3))
-
+            self.gl.draw_panel(bx, 24, btn_w, 40, bg_col, border_color=border_col, border_width=2 if is_cur else 1, radius=10, shadow_offset=(2, 3))
             icon = "star" if completed else ("lock_open" if unlocked else "lock_closed")
-            self.gl.draw_texture(self.assets.textures[icon], bx + 8, 32, 22, 22)
-            self.gl.draw_text(label, bx + 36, 35, color=COLOR_WHITE if unlocked else COLOR_TEXT_MUTED, size=14, bold=is_cur)
+            self.gl.draw_texture(self.assets.textures[icon], bx + 6, 32, 20, 20)
+            self.gl.draw_text(label, bx + 30, 35, color=COLOR_WHITE if unlocked else COLOR_TEXT_MUTED, size=13, bold=is_cur)
 
-        # Questão Atual
+        # Combate (se ativo)
+        in_combat = getattr(quiz_mgr, "in_combat", False)
+        qy_base = 96
+        if in_combat:
+            cy = 86
+            self.gl.draw_panel(40, cy, WINDOW_WIDTH - 80, 54, (46, 26, 36, 245), border_color=(180, 90, 90), border_width=2, radius=12, shadow_offset=(3, 4))
+            self.gl.draw_text("COMBATE DE CONHECIMENTO: Espírito da Dúvida", 60, cy + 8, color=(255, 210, 210), size=15, bold=True)
+            msg = getattr(quiz_mgr, "combat_message", "") or "Acerte para causar dano e vencer o duelo!"
+            self.gl.draw_text(msg, 60, cy + 30, color=COLOR_WHITE, size=13)
+            self._draw_hp_bar(520, cy + 10, 150, 12, getattr(quiz_mgr, "player_hp", 0), getattr(quiz_mgr, "player_max_hp", 3), COLOR_SUCCESS, "Você")
+            self._draw_hp_bar(700, cy + 10, 150, 12, getattr(quiz_mgr, "enemy_hp", 0), getattr(quiz_mgr, "enemy_max_hp", 2), COLOR_DANGER, "Dúvida")
+            qy_base = 150
+
         q = quiz_mgr.get_current_question()
         if not q:
             return
 
-        # Caixa Central da Pergunta
-        qw, qh = WINDOW_WIDTH - 80, 120
-        qx, qy = 40, 92
-        self.gl.draw_panel(qx, qy, qw, qh, (30, 40, 60), border_color=(74, 100, 145), border_width=2, radius=14, shadow_offset=(3, 4))
+        qw, qh = WINDOW_WIDTH - 80, 130
+        qx, qy = 40, qy_base
+        self.gl.draw_panel(qx, qy, qw, qh, (30, 40, 60, 248), border_color=(74, 100, 145), border_width=2, radius=14, shadow_offset=(3, 4))
 
-        # Título da Questão e Progresso
         total_q = quiz_mgr.total_questions_in_level()
         cur_q = quiz_mgr.current_question_idx + 1
         diff_label = DIFFICULTY_LABELS.get(quiz_mgr.current_difficulty, "")
 
-        self.gl.draw_panel(qx + 16, qy + 12, 160, 24, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=1, radius=7, shadow=False)
+        self.gl.draw_panel(qx + 16, qy + 12, 210, 24, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=1, radius=7, shadow=False)
         self.gl.draw_text(f"Nível {diff_label} • Questão {cur_q}/{total_q}", qx + 24, qy + 16, color=COLOR_WHITE, size=13, bold=True)
-        self.gl.draw_text(q["title"], qx + 190, qy + 16, color=COLOR_ACCENT, size=14, bold=True)
+        self.gl.draw_text(q["title"], qx + 236, qy + 16, color=COLOR_ACCENT, size=14, bold=True)
 
-        # Pontos de progresso das questões do nível
-        dot_r = 5
-        dot_gap = 16
-        dots_start_x = qx + qw - 20 - (total_q - 1) * dot_gap
-        for i in range(total_q):
-            dcx = dots_start_x + i * dot_gap
-            dcy = qy + 22
-            if i < cur_q - 1:
-                self.gl.draw_circle(dcx, dcy, dot_r, COLOR_SUCCESS)
-            elif i == cur_q - 1:
-                self.gl.draw_circle(dcx, dcy, dot_r + 1, COLOR_ACCENT)
-            else:
-                self.gl.draw_circle(dcx, dcy, dot_r, (70, 80, 100))
+        bar_x, bar_y, bar_w, bar_h = qx + 20, qy + 104, qw - 40, 10
+        self.gl.draw_rounded_rect(bar_x, bar_y, bar_w, bar_h, (45, 58, 82), radius=5)
+        prog = max(0.0, min(1.0, (cur_q - 1) / max(1, total_q)))
+        if self.feedback_active and self.feedback_correct and not (in_combat and getattr(quiz_mgr, "enemy_hp", 0) > 0):
+            prog = max(prog, cur_q / max(1, total_q))
+        self.gl.draw_rounded_rect(bar_x, bar_y, int(bar_w * prog), bar_h, COLOR_SUCCESS, radius=5)
 
-        # Enunciado da questão (suporta quebra em 2 linhas se longo)
-        words = q["question"].split()
-        line1, line2 = "", ""
-        for w in words:
-            if len(line1) + len(w) + 1 < 75:
-                line1 += (" " if line1 else "") + w
-            else:
-                line2 += (" " if line2 else "") + w
+        q_lines = self._wrap_text(q["question"], 78)
+        for i, line in enumerate(q_lines[:3]):
+            self.gl.draw_text(line, qx + 20, qy + 46 + i * 20, color=COLOR_WHITE, size=16 if i < 2 else 15, bold=True)
 
-        self.gl.draw_text(line1, qx + 20, qy + 50, color=COLOR_WHITE, size=16, bold=True)
-        if line2:
-            self.gl.draw_text(line2, qx + 20, qy + 76, color=COLOR_WHITE, size=16, bold=True)
-
-        # Alternativas de Múltipla Escolha (2 colunas x 2 linhas)
         self.quiz_buttons.clear()
         letters = ["A", "B", "C", "D"]
         card_w = (WINDOW_WIDTH - 110) // 2
-        card_h = 58
-        base_opt_y = 230
+        card_h = 62
+        base_opt_y = qy_base + 154
 
         for idx, opt_text in enumerate(q["options"]):
             col = idx % 2
             row = idx // 2
             cx = 40 + col * (card_w + 30)
             cy = base_opt_y + row * (card_h + 16)
-
             card_rect = pygame.Rect(cx, cy, card_w, card_h)
             self.quiz_buttons.append(card_rect)
 
             is_hovered = (self.hovered_option == idx)
-            bg_c = (44, 63, 94) if is_hovered else (28, 38, 58)
+            bg_c = (50, 72, 108) if is_hovered else (28, 38, 58)
             border_c = COLOR_ACCENT if is_hovered else COLOR_PRIMARY
-
+            if is_hovered:
+                self.gl.draw_glow_rect(cx, cy, card_w, card_h, (247, 201, 72, 55), layers=2, spread=4)
             self.gl.draw_panel(cx, cy, card_w, card_h, bg_c, border_color=border_c, border_width=2 if is_hovered else 1,
                                 radius=12, shadow_offset=(3, 4) if is_hovered else (2, 3))
 
-            # Letra da alternativa (A, B, C, D)
             badge_bg = COLOR_ACCENT if is_hovered else COLOR_PRIMARY_DARK
-            self.gl.draw_circle(cx + 29, cy + 29, 17, badge_bg)
-            self.gl.draw_circle(cx + 29, cy + 29, 17, border_c, filled=False, border_width=1)
-            self.gl.draw_text(letters[idx], cx + 29, cy + 19, color=COLOR_WHITE if not is_hovered else (30, 30, 40), size=18, bold=True, center_x=True)
+            self.gl.draw_circle(cx + 29, cy + 31, 17, badge_bg)
+            self.gl.draw_circle(cx + 29, cy + 31, 17, border_c, filled=False, border_width=1)
+            self.gl.draw_text(letters[idx], cx + 29, cy + 21, color=(30, 30, 40) if is_hovered else COLOR_WHITE, size=18, bold=True, center_x=True)
+            self.gl.draw_text(opt_text, cx + 58, cy + 21, color=COLOR_WHITE, size=16, bold=is_hovered)
 
-            # Texto da alternativa
-            self.gl.draw_text(opt_text, cx + 58, cy + 19, color=COLOR_WHITE, size=16, bold=is_hovered)
+        self.gl.draw_text("Clique ou use [1-4]/[A-D] • Acerte para vencer o combate quando ele aparecer • [ESC] voltar", WINDOW_WIDTH / 2, WINDOW_HEIGHT - 22, color=COLOR_TEXT_MUTED, size=13, center_x=True)
 
-        # Dica de navegação
-        self.gl.draw_text("Clique na resposta ou use as teclas [1, 2, 3, 4] / [A, B, C, D] | [ESC] Sair", WINDOW_WIDTH / 2, WINDOW_HEIGHT - 22, color=COLOR_TEXT_MUTED, size=13, center_x=True)
-
-        # Painel de Feedback (Acerto ou Erro Pedagógico)
         if self.feedback_active:
-            fb_w, fb_h = 680, 160
+            fb_w, fb_h = 740, 172
             fb_x = (WINDOW_WIDTH - fb_w) / 2
-            fb_y = 360
-
+            fb_y = 360 if not in_combat else 372
             if self.feedback_correct:
                 bg_col = (20, 55, 35, 250)
                 bdr_col = COLOR_SUCCESS
-                title_txt = "PARABÉNS! RESPOSTA CORRETA!"
+                if in_combat and getattr(quiz_mgr, "enemy_hp", 0) > 0:
+                    title_txt = "ACERTO! VOCÊ ATACOU A DÚVIDA!"
+                    action_txt = "Pressione [ENTER] para continuar o combate"
+                else:
+                    title_txt = "PARABÉNS! RESPOSTA CORRETA!"
+                    action_txt = "Pressione [ENTER] para continuar"
                 title_col = COLOR_SUCCESS
-                action_txt = "Pressione [ENTER] para Continuar"
             else:
                 bg_col = (55, 25, 25, 250)
                 bdr_col = COLOR_DANGER
-                title_txt = "OPS! QUE TAL ESTUDAR MAIS UM POUCO?"
-                title_col = (255, 140, 130)
-                action_txt = "Pressione [ENTER] para Tentar Novamente"
+                if getattr(quiz_mgr, "player_hp", 1) <= 0:
+                    title_txt = "A DÚVIDA VENCEU... MAS VOCÊ PODE TENTAR DE NOVO!"
+                    action_txt = "Pressione [ENTER] para voltar e revisar"
+                else:
+                    title_txt = "RESPOSTA ERRADA! O ESPÍRITO DA DÚVIDA ATACOU!"
+                    action_txt = "Pressione [ENTER] para contra-atacar respondendo"
+                title_col = (255, 160, 150)
 
             self.gl.draw_panel(fb_x, fb_y, fb_w, fb_h, bg_col, border_color=bdr_col, border_width=3, radius=16, shadow_offset=(4, 5))
-            self.gl.draw_text(title_txt, WINDOW_WIDTH / 2, fb_y + 16, color=title_col, size=18, bold=True, center_x=True)
+            self.gl.draw_text(title_txt, WINDOW_WIDTH / 2, fb_y + 16, color=title_col, size=17, bold=True, center_x=True)
+            self.gl.draw_text("Explicação:", fb_x + 24, fb_y + 50, color=COLOR_ACCENT, size=14, bold=True)
+            for i, line in enumerate(self._wrap_text(self.feedback_text, 98)[:2]):
+                self.gl.draw_text(line, fb_x + 24, fb_y + 74 + i * 22, color=COLOR_WHITE, size=14)
+            self.gl.draw_panel(WINDOW_WIDTH / 2 - 190, fb_y + 122, 380, 32, (30, 40, 60), border_color=bdr_col, border_width=1, radius=8, shadow=False)
+            self.gl.draw_text(action_txt, WINDOW_WIDTH / 2, fb_y + 129, color=COLOR_WHITE, size=14, bold=True, center_x=True)
 
-            # Explicação pedagógica
-            self.gl.draw_text("Explicação:", fb_x + 24, fb_y + 48, color=COLOR_ACCENT, size=14, bold=True)
-            self.gl.draw_text(self.feedback_text, fb_x + 24, fb_y + 72, color=COLOR_WHITE, size=14)
+    def _seed_victory_particles(self):
+        if self._victory_seeded:
+            return
+        self._victory_seeded = True
+        rnd = random.Random(42)
+        colors = [COLOR_ACCENT, (120, 220, 255), (140, 255, 180), (255, 160, 200), COLOR_WHITE]
+        for _ in range(40):
+            self._victory_particles.append({
+                "x": rnd.uniform(0, WINDOW_WIDTH),
+                "y": rnd.uniform(-80, WINDOW_HEIGHT),
+                "s": rnd.uniform(2, 5),
+                "v": rnd.uniform(18, 55),
+                "c": rnd.choice(colors),
+                "p": rnd.uniform(0, 6.28),
+            })
 
-            # Botão de Ação
-            self.gl.draw_panel(WINDOW_WIDTH / 2 - 160, fb_y + 112, 320, 32, (30, 40, 60), border_color=bdr_col, border_width=1, radius=8, shadow=False)
-            self.gl.draw_text(action_txt, WINDOW_WIDTH / 2, fb_y + 119, color=COLOR_WHITE, size=14, bold=True, center_x=True)
-
-    # =========================================================================
-    # 5. TELA DE VITÓRIA FINAL
-    # =========================================================================
-    def draw_victory_screen(self, student_name):
-        """Renderiza o certificado de superação acadêmica ao vencer o nível Difícil."""
+    def draw_victory_screen(self, student_name, quiz_mgr=None):
+        self._seed_victory_particles()
         self.gl.clear((14, 17, 28))
         self.gl.draw_vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, (24, 28, 44), (12, 14, 22))
 
-        pw, ph = 720, 450
+        t = pygame.time.get_ticks() / 1000.0
+        for p in self._victory_particles:
+            y = (p["y"] + t * p["v"]) % (WINDOW_HEIGHT + 40) - 20
+            x = p["x"] + math.sin(t * 1.5 + p["p"]) * 12
+            self.gl.draw_circle(x, y, p["s"], (*p["c"][:3], 180))
+
+        pw, ph = 760, 470
         px = (WINDOW_WIDTH - pw) / 2
         py = (WINDOW_HEIGHT - ph) / 2
 
-        # Moldura dourada com certificado
         self.gl.draw_panel(px, py, pw, ph, (26, 34, 52, 250), border_color=COLOR_ACCENT, border_width=4, radius=18, shadow_offset=(5, 6))
         self.gl.draw_panel(px + 8, py + 8, pw - 16, ph - 16, (0, 0, 0, 0), border_color=COLOR_ACCENT_DARK, border_width=1, radius=14, shadow=False)
 
-        # Título
-        self.gl.draw_text("CERTIFICADO DE EXCELÊNCIA ACADÊMICA", WINDOW_WIDTH / 2, py + 30, color=COLOR_ACCENT, size=24, bold=True, center_x=True)
-        self.gl.draw_text("O DESAFIO ESCOLAR - DISCIPLINA DE MATEMÁTICA", WINDOW_WIDTH / 2, py + 62, color=(180, 210, 245), size=14, bold=True, center_x=True)
+        self.gl.draw_text("CERTIFICADO DE EXCELÊNCIA ACADÊMICA", WINDOW_WIDTH / 2, py + 28, color=COLOR_ACCENT, size=24, bold=True, center_x=True)
+        self.gl.draw_text("O DESAFIO ESCOLAR - JORNADA DO CONHECIMENTO", WINDOW_WIDTH / 2, py + 60, color=(180, 210, 245), size=14, bold=True, center_x=True)
 
-        # 3 Estrelas douradas
-        for i, sx in enumerate([-40, 0, 40]):
-            self.gl.draw_texture(self.assets.textures["star"], WINDOW_WIDTH / 2 + sx - 12, py + 92, 24, 24)
+        for sx in [-40, 0, 40]:
+            self.gl.draw_texture(self.assets.textures["star"], WINDOW_WIDTH / 2 + sx - 12, py + 90, 24, 24)
 
-        # Certificação
-        self.gl.draw_text("Certificamos que o(a) estudante:", WINDOW_WIDTH / 2, py + 135, color=COLOR_TEXT_MUTED, size=15, center_x=True)
-        self.gl.draw_text(f"{student_name}", WINDOW_WIDTH / 2, py + 165, color=COLOR_WHITE, size=30, bold=True, center_x=True)
+        self.gl.draw_text("Certificamos que o(a) estudante:", WINDOW_WIDTH / 2, py + 132, color=COLOR_TEXT_MUTED, size=15, center_x=True)
+        self.gl.draw_text(f"{student_name}", WINDOW_WIDTH / 2, py + 160, color=COLOR_WHITE, size=30, bold=True, center_x=True)
 
-        msg1 = "Concluiu com êxito todas as baterias de exercícios: FÁCIL, MÉDIO e DIFÍCIL,"
-        msg2 = "provando dedicação, raciocínio lógico e superação contínua do conhecimento!"
-        self.gl.draw_text(msg1, WINDOW_WIDTH / 2, py + 215, color=(215, 230, 250), size=15, center_x=True)
-        self.gl.draw_text(msg2, WINDOW_WIDTH / 2, py + 240, color=(215, 230, 250), size=15, center_x=True)
+        msg1 = "Demonstrou grande evolução ao enfrentar desafios e combates de conhecimento,"
+        msg2 = "superando dúvidas e avançando em suas matérias com dedicação!"
+        self.gl.draw_text(msg1, WINDOW_WIDTH / 2, py + 208, color=(215, 230, 250), size=15, center_x=True)
+        self.gl.draw_text(msg2, WINDOW_WIDTH / 2, py + 232, color=(215, 230, 250), size=15, center_x=True)
 
-        # Mensagem sobre as outras salas
-        msg_rooms = "As demais salas temáticas (História, Geografia e Biologia) serão inauguradas em breve!"
-        self.gl.draw_text(msg_rooms, WINDOW_WIDTH / 2, py + 285, color=COLOR_ACCENT, size=14, bold=True, center_x=True)
+        # Status das matérias
+        y0 = py + 270
+        self.gl.draw_text("Progresso por matéria:", px + 60, y0, color=COLOR_ACCENT, size=15, bold=True)
+        if quiz_mgr is not None and hasattr(quiz_mgr, "is_subject_completed"):
+            for i, (sid, cfg) in enumerate(SUBJECTS.items()):
+                done = quiz_mgr.is_subject_completed(sid)
+                txt = f"✓ {cfg['name']} - Concluída" if done else f"• {cfg['name']} - Em andamento"
+                col = COLOR_SUCCESS if done else (210, 220, 235)
+                self.gl.draw_text(txt, px + 80, y0 + 26 + i * 22, color=col, size=14, bold=done)
+        else:
+            self.gl.draw_text("Matemática concluída! Continue explorando as outras matérias.", px + 80, y0 + 30, color=(210, 220, 235), size=14)
 
-        # Assinaturas
-        line_y = py + 345
+        line_y = py + 388
         self.gl.draw_rect(px + 80, line_y, 220, 1, (100, 120, 150))
         self.gl.draw_rect(px + pw - 300, line_y, 220, 1, (100, 120, 150))
-        self.gl.draw_text("Prof. Roberto (Matemática)", px + 190, line_y + 8, color=(160, 180, 210), size=12, center_x=True)
+        self.gl.draw_text("Professores das Salas", px + 190, line_y + 8, color=(160, 180, 210), size=12, center_x=True)
         self.gl.draw_text("Equipe Pecê Gamer / FUPAC", px + pw - 190, line_y + 8, color=(160, 180, 210), size=12, center_x=True)
 
-        # Botão para voltar ao jogo
-        self.gl.draw_panel(WINDOW_WIDTH / 2 - 160, py + ph - 55, 320, 36, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=2, radius=10, shadow_offset=(2, 3))
-        self.gl.draw_text("Pressione [ESPAÇO] para Continuar Explorando", WINDOW_WIDTH / 2, py + ph - 45, color=COLOR_WHITE, size=14, bold=True, center_x=True)
+        self.gl.draw_panel(WINDOW_WIDTH / 2 - 170, py + ph - 52, 340, 36, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=2, radius=10, shadow_offset=(2, 3))
+        self.gl.draw_text("Pressione [ESPAÇO] para Continuar Explorando", WINDOW_WIDTH / 2, py + ph - 42, color=COLOR_WHITE, size=14, bold=True, center_x=True)
+
+
+
+    def draw_game_over_student(self, player_name, score_mgr, leaderboard_entries):
+        self.gl.clear((30, 18, 22))
+        self.gl.draw_vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, (50, 24, 30), (18, 12, 18))
+        self.gl.draw_vignette(80)
+        pw, ph = 760, 470
+        px = (WINDOW_WIDTH - pw) / 2
+        py = (WINDOW_HEIGHT - ph) / 2
+        self.gl.draw_panel(px, py, pw, ph, (40, 28, 36, 248), border_color=COLOR_DANGER, border_width=3, radius=16, shadow_offset=(4,5))
+        self.gl.draw_text("FIM DA TENTATIVA - SEM CORAÇÕES", WINDOW_WIDTH/2, py + 28, color=COLOR_DANGER, size=24, bold=True, center_x=True)
+        self.gl.draw_text(f"Aluno: {player_name}", WINDOW_WIDTH/2, py + 62, color=COLOR_WHITE, size=18, bold=True, center_x=True)
+        hearts = getattr(score_mgr, 'hearts', 0)
+        score = getattr(score_mgr, 'score', 0)
+        correct = getattr(score_mgr, 'correct', 0)
+        wrong = getattr(score_mgr, 'wrong', 0)
+        nota = round((correct/(correct+wrong))*10,1) if (correct+wrong)>0 else 0.0
+        self.gl.draw_text(f"Pontuação: {score}   |   Acertos: {correct}   |   Erros: {wrong}   |   Nota: {nota}", WINDOW_WIDTH/2, py + 96, color=COLOR_ACCENT, size=16, bold=True, center_x=True)
+        self.gl.draw_text("Sua pontuação foi salva na tabela de classificação!", WINDOW_WIDTH/2, py + 124, color=(220,230,245), size=14, center_x=True)
+
+        self.gl.draw_text("Top 5 - Tabela de Pontuação", px + 40, py + 160, color=COLOR_WHITE, size=16, bold=True)
+        y = py + 188
+        for i, e in enumerate(leaderboard_entries[:5]):
+            line = f"{i+1}. {e.get('nome_jogador','-')}  |  {e.get('pontuacao',0)} pts  |  Nota {e.get('nota_final',0)}  |  A:{e.get('acertos',0)} E:{e.get('erros',0)}"
+            self.gl.draw_text(line, px + 50, y, color=(230,235,245), size=13)
+            y += 24
+        if not leaderboard_entries:
+            self.gl.draw_text("Nenhum registro ainda.", px + 50, y, color=COLOR_TEXT_MUTED, size=13)
+
+        self.gl.draw_panel(px + 80, py + ph - 90, 270, 40, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=2, radius=10, shadow_offset=(2,3))
+        self.gl.draw_text("[N] Próximo Aluno", px + 215, py + ph - 80, color=COLOR_WHITE, size=15, bold=True, center_x=True)
+        self.gl.draw_panel(px + 410, py + ph - 90, 270, 40, (60,50,40), border_color=COLOR_ACCENT, border_width=2, radius=10, shadow_offset=(2,3))
+        self.gl.draw_text("[T] Ver Tabela Completa", px + 545, py + ph - 80, color=COLOR_WHITE, size=15, bold=True, center_x=True)
+        self.gl.draw_text("[ESC] Voltar ao início", WINDOW_WIDTH/2, py + ph - 30, color=COLOR_TEXT_MUTED, size=13, center_x=True)
+
+    def draw_leaderboard_screen(self, entries):
+        self.gl.clear((18, 22, 34))
+        self.gl.draw_vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, (28, 36, 54), (12, 16, 24))
+        self.gl.draw_vignette(70)
+        pw, ph = 840, 480
+        px = (WINDOW_WIDTH - pw) / 2
+        py = (WINDOW_HEIGHT - ph) / 2
+        self.gl.draw_panel(px, py, pw, ph, (24, 30, 46, 248), border_color=COLOR_ACCENT, border_width=3, radius=16, shadow_offset=(4,5))
+        self.gl.draw_text("TABELA DE PONTUAÇÃO - RANKING", WINDOW_WIDTH/2, py + 24, color=COLOR_ACCENT, size=26, bold=True, center_x=True)
+        self.gl.draw_text("Pos  Nome            Gênero    Pontos  Acertos  Erros  Nota  Data", px + 30, py + 66, color=(180,210,255), size=14, bold=True)
+        self.gl.draw_rect(px + 24, py + 86, pw - 48, 2, (70,90,120))
+        y = py + 100
+        for i, e in enumerate(entries[:10]):
+            nome = str(e.get('nome_jogador','-'))[:14]
+            gen = str(e.get('genero','-'))[:8]
+            pts = e.get('pontuacao',0)
+            ac = e.get('acertos',0)
+            er = e.get('erros',0)
+            nota = e.get('nota_final',0)
+            data = str(e.get('data',''))[:10]
+            line = f"{i+1:>2}.  {nome:<14} {gen:<8} {pts:>6}   {ac:>6}   {er:>5}  {nota:>4}  {data}"
+            col = COLOR_WHITE if i < 3 else (220,225,235)
+            self.gl.draw_text(line, px + 30, y, color=col, size=14, bold=(i<3))
+            y += 28
+        if not entries:
+            self.gl.draw_text("Nenhuma pontuação salva ainda.", WINDOW_WIDTH/2, py + 180, color=COLOR_TEXT_MUTED, size=16, center_x=True)
+        self.gl.draw_text("[ESC/ENTER] Voltar", WINDOW_WIDTH/2, py + ph - 28, color=COLOR_TEXT_MUTED, size=13, center_x=True)
