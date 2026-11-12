@@ -297,7 +297,7 @@ class DesafioEscolarGame:
                         "Regras da Competição",
                         [
                             "- Cada nível tem 5 perguntas de 4 alternativas, da matéria do professor visitado.",
-                            "- Acertar soma pontos (10/15/20/30); errar custa 1 coração.",
+                            "- Acertar soma pontos (10/15/20/30); errar custa 1 coração, mas você pode tentar a mesma pergunta de novo com a dica.",
                             "- 'Responder depois' guarda a pergunta para o fim do nível.",
                             "- Ao perder os 3 corações, entra um representante da outra equipe."
                         ],

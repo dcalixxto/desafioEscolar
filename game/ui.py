@@ -467,7 +467,7 @@ class UIManager:
 
             self.gl.draw_panel(fb_x, fb_y, fb_w, fb_h, bg_col, border_color=bdr_col, border_width=3, radius=16, shadow_offset=(4, 5))
             self.gl.draw_text(title_txt, WINDOW_WIDTH / 2, fb_y + 16, color=title_col, size=17, bold=True, center_x=True)
-            self.gl.draw_text("Explicação:", fb_x + 24, fb_y + 50, color=COLOR_ACCENT, size=14, bold=True)
+            self.gl.draw_text("Dica:" if not self.feedback_correct else "Explicação:", fb_x + 24, fb_y + 50, color=COLOR_ACCENT, size=14, bold=True)
             for i, line in enumerate(self._wrap_text(self.feedback_text, 98)[:2]):
                 self.gl.draw_text(line, fb_x + 24, fb_y + 74 + i * 22, color=COLOR_WHITE, size=14)
             self.gl.draw_panel(WINDOW_WIDTH / 2 - 190, fb_y + 122, 380, 32, (30, 40, 60), border_color=bdr_col, border_width=1, radius=8, shadow=False)

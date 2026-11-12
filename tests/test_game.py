@@ -22,7 +22,7 @@ from game.audio import sound_manager
 from game.assets import AssetManager
 from game.entities import Player
 from game.world import SchoolWorld, ZONE_HALLWAY, ZONE_CLASSROOM
-from game.quiz_data import QuizManager, QUIZ_QUESTIONS
+from game.quiz_data import QuizManager, QUIZ_QUESTIONS, ALL_QUESTIONS
 from game.ui import UIManager
 from game.competition import CompetitionManager
 from game.ui_competition import CompetitionUI
@@ -121,26 +121,41 @@ def run_competition_tests(gl, comp_ui):
     assert comp.run["points"] == 125, "Rodada deve somar 50 (Fácil) + 75 (Médio, 5 acertos de 15)!"
     print("[OK] 'Responder depois': pergunta adiada voltou ao fim do nível e o nível foi concluído.")
 
-    # 5. Derrota: 3 erros drenam os corações e encerram a rodada
+    # 5. Errar permite responder NOVAMENTE a mesma pergunta (a dica ajuda)
+    q0 = comp.current_question()
+    idx0 = comp.run["q_idx"]
+    is_correct, help_text = comp.answer(1 - q0["correct_index"])
+    assert not is_correct, "Resposta propositalmente errada!"
+    assert help_text != q0["explanation"], "Ao errar deve receber a DICA, não a explicação com a resposta!"
+    event = comp.confirm_after_feedback()
+    assert event == "QUESTION_RETRY", "Após errar, deve poder responder a mesma pergunta de novo!"
+    assert comp.run["q_idx"] == idx0, "A pergunta deve continuar a mesma após o erro!"
+    assert comp.run["lives"] == 2, "O erro custa 1 coração!"
+    # acerta na 2ª tentativa: avança normalmente e pontua
+    is_correct, _ = comp.answer(q0["correct_index"])
+    assert is_correct, "Acerto na 2ª tentativa!"
+    event = comp.confirm_after_feedback()
+    assert event == "QUESTION" and comp.run["q_idx"] == idx0 + 1, "Após acertar na 2ª tentativa, avança para a próxima pergunta!"
+    assert comp.run["points"] == 145, "Rodada deve somar 125 + 20 do acerto no Difícil!"
+    print("[OK] Tentativa com dica: errar mantém a MESMA pergunta; acertar depois avança e pontua.")
+
+    # 6. Derrota: os 2 erros restantes drenam os corações e encerram a rodada
     comp.answer(1 - comp.current_question()["correct_index"])
     comp.confirm_after_feedback()
-    assert comp.run["lives"] == 2, "1º erro deve deixar 2 corações!"
-    comp.answer(1 - comp.current_question()["correct_index"])
-    comp.confirm_after_feedback()
-    assert comp.run["lives"] == 1, "2º erro deve deixar 1 coração!"
+    assert comp.run["lives"] == 1, "Próximo erro deve deixar 1 coração!"
     comp.answer(1 - comp.current_question()["correct_index"])
     event = comp.confirm_after_feedback()
-    assert comp.run["lives"] == 0, "3º erro deve zerar os corações!"
+    assert comp.run["lives"] == 0, "Último erro deve zerar os corações!"
     assert event == "TURN_END" and comp.run["finished"] == "derrota", "Sem corações a rodada deve terminar em derrota!"
     comp.end_turn()
-    assert comp.team_points[0] == 125, "Pontos das rodadas devem ser acumulados na equipe (50+75 da progressão)!"
+    assert comp.team_points[0] == 145, "Pontos das rodadas devem ser acumulados na equipe (50+75+20 da progressão)!"
     assert comp.turn_team == 1, "Após a derrota da Equipe 1, a vez é da Equipe 2!"
     assert comp.next_up()["rep"] == 1, "Equipe 2 deve começar com o representante 1!"
     assert len(comp.history) == 1, "A rodada disputada deve estar registrada na tabela de andamento!"
     entry = comp.history[0]
-    assert entry["team"] == 0 and entry["rep"] == 1 and entry["points"] == 125, "Registro da tabela deve guardar equipe, representante e pontos!"
+    assert entry["team"] == 0 and entry["rep"] == 1 and entry["points"] == 145, "Registro da tabela deve guardar equipe, representante e pontos!"
     assert entry["finished"] == "derrota", "Registro da tabela deve guardar o resultado da rodada!"
-    print("[OK] Sistema de vida: 3 erros encerram a rodada e a vez passa para a Equipe 2.")
+    print("[OK] Sistema de vida: erros drenam os corações e, sem corações, a vez passa para a Equipe 2.")
     print("[OK] Tabela de andamento: a rodada concluída foi registrada com equipe, rep, pontos e resultado.")
 
     # 6. Competição completa: revezamento até os 5 representantes de cada equipe
@@ -366,6 +381,17 @@ def run_automated_test():
     quiz.in_quiz = False
     quiz.end_combat()
     print("[OK] Errar -> dica -> acertar avança de vez e pontua UMA única vez (bug corrigido).")
+
+    # 4c. Dicas pedagógicas: todas as perguntas têm dica própria e nenhuma
+    #     dica entrega a resposta (não contém o texto da alternativa correta)
+    for bank in list(ALL_QUESTIONS.values()) + list(COMPETITION_QUESTIONS.values()):
+        for diff, questions in bank.items():
+            for q in questions:
+                hint = q.get("hint", "")
+                assert hint and hint != q["explanation"], f"'{q['title']}' precisa de uma dica própria!"
+                assert q["options"][q["correct_index"]].lower() not in hint.lower(), \
+                    f"A dica de '{q['title']}' está entregando a resposta!"
+    print("[OK] Dicas de todas as perguntas: ajudam a chegar à resposta sem entregá-la.")
 
     # 5. Renderiza a Tela de Vitória
     gl.clear()

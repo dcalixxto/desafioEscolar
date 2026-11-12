@@ -10,7 +10,8 @@ Regras implementadas (definidas pela equipe organizadora do evento):
   do professor visitado (cada professor pergunta só o tema dele); o
   representante só avança para o próximo nível após concluir as 5 perguntas.
 - Há a opção "Responder depois": a pergunta é adiada e volta ao fim do nível.
-- Errar diminui os corações da rodada; acertar soma pontos (10/15/20/30 por nível).
+- Errar diminui os corações da rodada e o representante pode tentar a MESMA
+  pergunta de novo, com a ajuda da dica; acertar soma pontos (10/15/20/30 por nível).
 - Vence a equipe que avançar mais longe; em empate de nível, a pontuação desempata.
 """
 
@@ -102,6 +103,7 @@ class CompetitionManager:
             "points": 0,
             "correct": 0,
             "wrong": 0,
+            "last_correct": None,               # resultado da última resposta
             "finished": None,                   # None | "derrota" | "vitoria"
         }
         return self.run
@@ -178,13 +180,18 @@ class CompetitionManager:
         if question is None:
             return False, ""
         is_correct = (option_index == question["correct_index"])
+        self.run["last_correct"] = is_correct
         if is_correct:
             self.run["points"] += self.current_points_value()
             self.run["correct"] += 1
+            # acerto: reforço com a explicação completa
+            return True, question["explanation"]
         else:
             self.run["lives"] -= 1
             self.run["wrong"] += 1
-        return is_correct, question["explanation"]
+            # erro: apenas uma dica, para ajudar a chegar à resposta sem
+            # entregá-la (a explicação completa só aparece no acerto)
+            return False, question.get("hint", question["explanation"])
 
     def defer_question(self):
         """'Responder depois': adia a pergunta atual e pula para a próxima.
@@ -212,6 +219,8 @@ class CompetitionManager:
 
         Retorna um dos eventos:
         - "QUESTION": próxima pergunta (ou pergunta adiada que voltou)
+        - "QUESTION_RETRY": errou e pode responder NOVAMENTE a mesma
+          pergunta, agora com a ajuda da dica
         - "LEVEL_COMPLETE": nível concluído, avançou de dificuldade
         - "TURN_END": rodada do representante terminou (derrota ou vitória)
         """
@@ -222,6 +231,12 @@ class CompetitionManager:
         if self.run["lives"] <= 0:
             self.run["finished"] = "derrota"
             return "TURN_END"
+
+        # errou: fica na MESMA pergunta para tentar de novo (a dica serve
+        # exatamente para isso); o erro continua custando 1 coração
+        if self.run.get("last_correct") is False:
+            self.run["last_correct"] = None
+            return "QUESTION_RETRY"
 
         return self._advance()
 

@@ -601,7 +601,7 @@ class CompetitionUI:
         self.gl.draw_text(title, WINDOW_WIDTH / 2, fb_y + 18, color=title_col, size=26, bold=True, center_x=True)
         self.gl.draw_text(sub, WINDOW_WIDTH / 2, fb_y + 52, color=(220, 232, 245), size=15, center_x=True)
 
-        self.gl.draw_text("Explicação:", fb_x + 28, fb_y + 84, color=COLOR_ACCENT, size=16, bold=True)
+        self.gl.draw_text("Dica:" if not self.feedback_correct else "Explicação:", fb_x + 28, fb_y + 84, color=COLOR_ACCENT, size=16, bold=True)
         for i, line in enumerate(self._wrap_text(self.feedback_text, 92)[:2]):
             self.gl.draw_text(line, fb_x + 28, fb_y + 108 + i * 24, color=COLOR_WHITE, size=16)
 
