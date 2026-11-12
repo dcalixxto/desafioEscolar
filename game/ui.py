@@ -14,6 +14,22 @@ from game.config import (
     DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL, DIFF_DESAFIO, DIFFICULTY_LABELS, SUBJECTS
 )
 
+def _to_logical(pos):
+    """Converte a posição física do mouse para coordenadas lógicas (960x540),
+    descontando o letterbox do viewport quando em tela cheia."""
+    mx, my = pos
+    surf = pygame.display.get_surface()
+    if surf is None:
+        return mx, my
+    w, h = surf.get_size()
+    if w == WINDOW_WIDTH and h == WINDOW_HEIGHT:
+        return mx, my
+    scale = min(w / float(WINDOW_WIDTH), h / float(WINDOW_HEIGHT))
+    vx = (w - WINDOW_WIDTH * scale) / 2.0
+    vy = (h - WINDOW_HEIGHT * scale) / 2.0
+    return int((mx - vx) / scale), int((my - vy) / scale)
+
+
 class UIManager:
     def __init__(self, gl_renderer, assets, sound_manager):
         self.gl = gl_renderer
@@ -60,7 +76,7 @@ class UIManager:
                     self.player_name_input += event.unicode
                     self.sound.play("blip")
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mx, my = pygame.mouse.get_pos()
+            mx, my = _to_logical(pygame.mouse.get_pos())
             pw, ph = 680, 420
             px = (WINDOW_WIDTH - pw) / 2
             py = (WINDOW_HEIGHT - ph) / 2
@@ -114,24 +130,29 @@ class UIManager:
         self.gl.draw_text("Você tem 3 corações. A cada erro, perde 1. Sem corações, sua pontuação é salva!", WINDOW_WIDTH / 2, py + 388, color=(255, 200, 200), size=13, center_x=True)
 
     def draw_exploration_hud(self, player_name, location_name, quiz_mgr, interactable, score_mgr=None):
-        self.gl.draw_panel(16, 16, 360, 66, (20, 26, 40, 235), border_color=(64, 86, 118), border_width=2, radius=14, shadow_offset=(3, 4))
-        self.gl.draw_circle(44, 44, 20, (36, 48, 70))
-        self.gl.draw_circle(44, 44, 20, COLOR_PRIMARY, filled=False, border_width=2)
-        self.gl.draw_text(player_name[:1].upper() if player_name else "A", 44, 33, color=COLOR_ACCENT, size=20, bold=True, center_x=True)
-        self.gl.draw_text(f"Estudante: {player_name}", 74, 22, color=COLOR_WHITE, size=15, bold=True)
-        self.gl.draw_text(f"Local: {location_name}", 74, 43, color=(150, 200, 255), size=13)
+        # painel do estudante, no canto inferior esquerdo (nada no topo, para
+        # não cobrir as placas com os nomes das salas)
+        py = WINDOW_HEIGHT - 78
+        self.gl.draw_panel(16, py, 360, 66, (20, 26, 40, 235), border_color=(64, 86, 118), border_width=2, radius=14, shadow_offset=(3, 4))
+        self.gl.draw_circle(44, py + 28, 20, (36, 48, 70))
+        self.gl.draw_circle(44, py + 28, 20, COLOR_PRIMARY, filled=False, border_width=2)
+        self.gl.draw_text(player_name[:1].upper() if player_name else "A", 44, py + 17, color=COLOR_ACCENT, size=20, bold=True, center_x=True)
+        self.gl.draw_text(f"Estudante: {player_name}", 74, py + 6, color=COLOR_WHITE, size=15, bold=True)
+        self.gl.draw_text(f"Local: {location_name}", 74, py + 27, color=(150, 200, 255), size=13)
         if score_mgr is not None:
             hearts = getattr(score_mgr, "hearts", 0)
             score = getattr(score_mgr, "score", 0)
             hx = 240
             for i in range(3):
                 col = COLOR_DANGER if i < hearts else (80,80,90)
-                self.gl.draw_text("♥", hx + i*18, 22, color=col, size=18, bold=True)
-            self.gl.draw_text(f"Pts: {score}", 240, 45, color=COLOR_ACCENT, size=13, bold=True)
+                self.gl.draw_text("♥", hx + i*18, py + 6, color=col, size=18, bold=True)
+            self.gl.draw_text(f"Pts: {score}", 240, py + 29, color=COLOR_ACCENT, size=13, bold=True)
 
+        # progresso dos níveis, no canto inferior direito
+        py2 = WINDOW_HEIGHT - 68
         subj_name = quiz_mgr.subject_name() if hasattr(quiz_mgr, "subject_name") else "Matemática"
-        self.gl.draw_panel(WINDOW_WIDTH - 325, 16, 309, 56, (20, 26, 40, 235), border_color=(64, 86, 118), border_width=2, radius=14, shadow_offset=(3, 4))
-        self.gl.draw_text(f"Progresso: {subj_name}", WINDOW_WIDTH - 310, 22, color=COLOR_ACCENT, size=14, bold=True)
+        self.gl.draw_panel(WINDOW_WIDTH - 325, py2, 309, 56, (20, 26, 40, 235), border_color=(64, 86, 118), border_width=2, radius=14, shadow_offset=(3, 4))
+        self.gl.draw_text(f"Progresso: {subj_name}", WINDOW_WIDTH - 310, py2 + 6, color=COLOR_ACCENT, size=14, bold=True)
 
         diffs = [
             (DIFF_FACIL, "Fácil", 0),
@@ -145,14 +166,15 @@ class UIManager:
             unlocked = quiz_mgr.unlocked_levels.get(d_key, False)
             icon_key = "star" if completed else ("lock_open" if unlocked else "lock_closed")
             color_text = COLOR_SUCCESS if completed else (COLOR_WHITE if unlocked else COLOR_TEXT_MUTED)
-            self.gl.draw_texture(self.assets.textures[icon_key], base_x + offset_x, 38, 18, 18)
-            self.gl.draw_text(label, base_x + offset_x + 22, 41, color=color_text, size=11, bold=True)
+            self.gl.draw_texture(self.assets.textures[icon_key], base_x + offset_x, py2 + 22, 18, 18)
+            self.gl.draw_text(label, base_x + offset_x + 22, py2 + 25, color=color_text, size=11, bold=True)
 
+        # dica de interação, flutuando acima dos painéis inferiores
         if interactable is not None:
             pulse = 2 if (pygame.time.get_ticks() // 350) % 2 == 0 else 0
             bw, bh = 420 + pulse * 2, 40
             bx = (WINDOW_WIDTH - bw) / 2
-            by = WINDOW_HEIGHT - 64
+            by = WINDOW_HEIGHT - 130
             self.gl.draw_glow_rect(bx, by, bw, bh, (247, 201, 72, 60), layers=3, spread=4)
             self.gl.draw_panel(bx, by, bw, bh, (255, 245, 180, 245), border_color=COLOR_ACCENT_DARK, border_width=2, radius=18, shadow_offset=(2, 4))
             self.gl.draw_text(f"[E / ESPAÇO] {interactable.label}", WINDOW_WIDTH / 2, by + 10, color=(30, 35, 45), size=15, bold=True, center_x=True)
@@ -240,11 +262,9 @@ class UIManager:
                     return "COMBAT_DEFEAT"
 
                 if self.feedback_correct:
-                    # Se estava em combate, só avança a questão quando o inimigo for derrotado
-                    if getattr(quiz_mgr, "in_combat", False) and getattr(quiz_mgr, "enemy_hp", 0) > 0:
-                        quiz_mgr.retry_question()  # nova tentativa de ataque na mesma questão
-                        return "REFRESH"
-
+                    # Acerto (mesmo após dica/combate) avança de imediato para
+                    # a próxima pergunta; a pontuação já foi concedida uma
+                    # única vez em answer_question.
                     finished_level = quiz_mgr.advance_question()
                     if finished_level:
                         self.sound.play("levelup")
@@ -277,7 +297,7 @@ class UIManager:
                 return "EXIT_QUIZ"
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mx, my = pygame.mouse.get_pos()
+            mx, my = _to_logical(event.pos)
             for rect, d_key in getattr(self, "diff_buttons", []):
                 if rect.collidepoint(mx, my) and quiz_mgr.unlocked_levels.get(d_key, False):
                     self.sound.play("blip")
@@ -288,7 +308,7 @@ class UIManager:
                     return f"ANSWER_{idx}"
 
         if event.type == pygame.MOUSEMOTION:
-            mx, my = pygame.mouse.get_pos()
+            mx, my = _to_logical(event.pos)
             prev = self.hovered_option
             self.hovered_option = -1
             for idx, rect in enumerate(self.quiz_buttons):
@@ -431,12 +451,8 @@ class UIManager:
             if self.feedback_correct:
                 bg_col = (20, 55, 35, 250)
                 bdr_col = COLOR_SUCCESS
-                if in_combat and getattr(quiz_mgr, "enemy_hp", 0) > 0:
-                    title_txt = "ACERTO! VOCÊ ATACOU A DÚVIDA!"
-                    action_txt = "Pressione [ENTER] para continuar o combate"
-                else:
-                    title_txt = "PARABÉNS! RESPOSTA CORRETA!"
-                    action_txt = "Pressione [ENTER] para continuar"
+                title_txt = "PARABÉNS! RESPOSTA CORRETA!"
+                action_txt = "Pressione [ENTER] para continuar"
                 title_col = COLOR_SUCCESS
             else:
                 bg_col = (55, 25, 25, 250)

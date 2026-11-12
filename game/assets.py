@@ -126,6 +126,19 @@ class AssetManager:
     def _register(self, key, surf):
         self.textures[key] = self.gl.create_texture(surf)[0]
 
+    def rebuild(self):
+        """Recria todas as texturas GL (após troca de modo de vídeo).
+
+        Ao recriar a superfície de exibição o contexto OpenGL pode ser
+        recriado junto, invalidando os IDs de textura existentes.
+        """
+        self.textures.clear()
+        self.player_frames.clear()
+        self.teacher_frames.clear()
+        self.teacher_frames_by_subject.clear()
+        self.student_frames_by_style.clear()
+        self._generate_all_assets()
+
     def _generate_all_assets(self):
         """Gera todos os sprites, tiles e objetos do jogo."""
         self._generate_shadow()

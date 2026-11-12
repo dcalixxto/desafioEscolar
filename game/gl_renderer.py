@@ -16,6 +16,7 @@ class GLRenderer:
         self.text_texture_cache = {}
         self.camera_x = 0.0
         self.camera_y = 0.0
+        self.viewport_scale = 1.0  # escala do viewport (tela cheia nativa > 1)
         self._init_gl()
 
     def _init_gl(self):
@@ -34,6 +35,51 @@ class GLRenderer:
         glDisable(GL_DEPTH_TEST)
         glDisable(GL_CULL_FACE)
         glEnable(GL_TEXTURE_2D)
+
+    def reinit(self):
+        """Reconfigura o pipeline GL após troca de modo de vídeo (ex.: tela cheia).
+
+        A recriação da superfície pode invalidar o contexto OpenGL: os IDs de
+        textura antigos deixam de existir e devem ser descartados sem deletar
+        (não existem mais no contexto atual).
+        """
+        self.text_texture_cache = {}
+        self._init_gl()
+
+    def refresh_viewport(self):
+        """Ajusta o viewport ao tamanho real da superfície, mantendo a proporção
+        lógica (960x540) via letterbox centralizado.
+
+        Essencial em tela cheia na resolução nativa do monitor: o desenho continua
+        usando coordenadas lógicas e preenche a tela sem distorcer a imagem.
+        """
+        surf = pygame.display.get_surface()
+        if surf is None:
+            glViewport(0, 0, self.width, self.height)
+            return
+        w, h = surf.get_size()
+        scale = min(w / float(self.width), h / float(self.height))
+        vw = int(self.width * scale)
+        vh = int(self.height * scale)
+        glViewport((w - vw) // 2, (h - vh) // 2, vw, vh)
+        self.viewport_scale = scale
+
+    def logical_mouse_pos(self, pos=None):
+        """Converte a posição física do mouse para coordenadas lógicas (960x540),
+        descontando o letterbox aplicado por refresh_viewport()."""
+        if pos is None:
+            pos = pygame.mouse.get_pos()
+        mx, my = pos
+        surf = pygame.display.get_surface()
+        if surf is None:
+            return mx, my
+        w, h = surf.get_size()
+        if w == self.width and h == self.height:
+            return mx, my
+        scale = min(w / float(self.width), h / float(self.height))
+        vx = (w - self.width * scale) / 2.0
+        vy = (h - self.height * scale) / 2.0
+        return int((mx - vx) / scale), int((my - vy) / scale)
 
     def clear(self, color=COLOR_BG):
         r = color[0] / 255.0
@@ -256,31 +302,44 @@ class GLRenderer:
         if not text:
             return 0, 0
 
-        cache_key = (text, size, bold, color)
+        # Em tela cheia nativa o viewport amplia o desenho; renderizar o texto
+        # na resolução física real mantém os glifos nítidos (sem esticar/borrar).
+        scale = self.viewport_scale
+        cache_key = (text, size, bold, color, round(scale, 3))
         if cache_key in self.text_texture_cache:
-            tex_id, tw, th = self.text_texture_cache[cache_key]
+            tex_id, tex_w, tex_h, logical_w, logical_h = self.text_texture_cache[cache_key]
         else:
-            font = self.get_font(size, bold)
+            render_size = max(6, int(round(size * scale)))
+            font = self.get_font(render_size, bold)
             surface = font.render(text, True, color[:3])
-            tex_id, tw, th = self.create_texture(surface)
+            tex_id, tex_w, tex_h = self.create_texture(surface)
+            logical_w = tex_w / scale
+            logical_h = tex_h / scale
             if len(self.text_texture_cache) > 500:
                 self.clear_text_cache()
-            self.text_texture_cache[cache_key] = (tex_id, tw, th)
+            self.text_texture_cache[cache_key] = (tex_id, tex_w, tex_h, logical_w, logical_h)
 
-        draw_x = x - (tw / 2.0) if center_x else x
-        draw_y = y - (th / 2.0) if center_y else y
+        draw_x = x - (logical_w / 2.0) if center_x else x
+        draw_y = y - (logical_h / 2.0) if center_y else y
 
-        self.draw_texture(tex_id, draw_x, draw_y, tw, th)
-        return tw, th
+        # posições inteiras: glifos alinhados à grade de pixels do monitor,
+        # sem meio-pixel (letras "borradas"/cópia dupla no upscale).
+        draw_x = round(draw_x)
+        draw_y = round(draw_y)
+
+        self.draw_texture(tex_id, draw_x, draw_y, logical_w, logical_h)
+        return logical_w, logical_h
 
     def measure_text(self, text, size=20, bold=False):
-        font = self.get_font(size, bold)
-        return font.size(text)
+        scale = self.viewport_scale
+        font = self.get_font(max(6, int(round(size * scale))), bold)
+        tw, th = font.size(text)
+        return tw / scale, th / scale
 
     def clear_text_cache(self):
-        for tex_id, _, _ in self.text_texture_cache.values():
+        for entry in self.text_texture_cache.values():
             try:
-                glDeleteTextures(1, [tex_id])
+                glDeleteTextures(1, [entry[0]])
             except Exception:
                 pass
         self.text_texture_cache.clear()

@@ -25,6 +25,7 @@ COLOR_PANEL_BORDER = (82, 104, 145)
 COLOR_TEXT = (235, 238, 245)
 COLOR_TEXT_MUTED = (150, 162, 185)
 
+STATE_MENU = "MENU"                 # Menu inicial (escolha de modo)
 STATE_NAME_INPUT = "NAME_INPUT"
 STATE_EXPLORE = "EXPLORE"
 STATE_DIALOG = "DIALOG"
@@ -32,6 +33,22 @@ STATE_QUIZ = "QUIZ"
 STATE_VICTORY = "VICTORY"
 STATE_GAME_OVER = "GAME_OVER"
 STATE_LEADERBOARD = "LEADERBOARD"
+
+# Modo Competição (duas equipes, um representante por vez)
+STATE_COMP_SETUP = "COMP_SETUP"     # cadastro dos nomes das equipes
+STATE_COMP_REP_NAME = "COMP_REP_NAME"  # nome do representante da rodada
+STATE_COMP_EXPLORE = "COMP_EXPLORE" # representante andando pela escola
+STATE_COMP_DIALOG = "COMP_DIALOG"   # diálogo durante a competição
+STATE_COMP_QUIZ = "COMP_QUIZ"       # representante respondendo perguntas
+STATE_COMP_TURN_END = "COMP_TURN_END"  # fim da rodada de um representante
+STATE_COMP_RESULT = "COMP_RESULT"   # tela final com a equipe vencedora
+
+# Modo Competição
+COMP_MAX_REPS = 5      # representantes por equipe
+COMP_MAX_LIVES = 3     # corações de cada representante por rodada
+# Cores por equipe (Equipe 1 = azul, Equipe 2 = vermelha)
+COMP_TEAM_COLORS = [(64, 158, 224), (235, 87, 87)]
+COMP_TEAM_COLORS_DARK = [(42, 110, 165), (170, 55, 55)]
 
 DIFF_FACIL = "facil"
 DIFF_MEDIO = "medio"

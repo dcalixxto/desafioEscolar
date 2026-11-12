@@ -129,6 +129,8 @@ class QuizManager:
         self.in_quiz = False
         self.last_answer_correct = None
         self.selected_option = None
+        # marca se a pergunta atual já foi pontuada (impede pontos duplicados)
+        self.current_question_scored = False
         # Combate ao errar
         self.in_combat = False
         self.player_hp = 3
@@ -164,6 +166,7 @@ class QuizManager:
         if subject in ALL_QUESTIONS:
             self.current_subject = subject
             self.current_question_idx = 0
+            self.current_question_scored = False
             self.in_quiz = False
             self.end_combat()
 
@@ -184,6 +187,7 @@ class QuizManager:
         self.in_quiz = True
         self.last_answer_correct = None
         self.selected_option = None
+        self.current_question_scored = False
         self.end_combat()
         return True
 
@@ -209,8 +213,20 @@ class QuizManager:
         self.combat_message = ""
 
     def answer_question(self, option_index):
+        """Registra a resposta da pergunta atual.
+
+        A pontuação de uma pergunta é concedida uma única vez: o marcador
+        current_question_scored impede novas pontuações/pontuações duplicadas
+        na mesma pergunta, mesmo após o uso de dicas e novas tentativas.
+        Um acerto (mesmo vindo após dica/combate) é reconhecido de imediato
+        e a interface avança para a próxima pergunta.
+        """
         q = self.get_current_question()
         if not q:
+            return False, ""
+
+        # pergunta já concluída (pontuada): ignora novas respostas
+        if self.current_question_scored:
             return False, ""
 
         self.selected_option = option_index
@@ -218,12 +234,11 @@ class QuizManager:
         self.last_answer_correct = is_correct
 
         if is_correct:
+            self.current_question_scored = True
             if self.in_combat:
-                self.enemy_hp = max(0, self.enemy_hp - 1)
-                if self.enemy_hp <= 0:
-                    self.combat_message = "Você venceu o Espírito da Dúvida!"
-                else:
-                    self.combat_message = "Acerto! Você causou dano no Espírito da Dúvida."
+                # o acerto vence o Espírito da Dúvida de imediato
+                self.enemy_hp = 0
+                self.combat_message = "Você venceu o Espírito da Dúvida!"
             return True, q["explanation"]
         else:
             if not self.in_combat:
@@ -239,6 +254,7 @@ class QuizManager:
         """Avança para a próxima questão ou conclui o nível."""
         self.last_answer_correct = None
         self.selected_option = None
+        self.current_question_scored = False
         self.current_question_idx += 1
         self.end_combat()
 

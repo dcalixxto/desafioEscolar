@@ -44,6 +44,21 @@ janelas com vista para o exterior.
 
 ---
 
+## 🏆 Modo Competição
+
+No menu inicial, escolha **Modo Competição** para o formato de evento entre duas equipes:
+
+- Cada equipe cadastra um nome no jogo e tem **5 representantes** (escolhidos presencialmente, sem cadastro de integrantes)
+- Os representantes **andam pela escola como no modo clássico**: antes de cada rodada digita-se o nome do representante; fale com o professor (`E`/`Espaço`) para iniciar os desafios
+- Participa **um representante por vez**, que joga com **3 corações** (painel de vida no **canto inferior esquerdo**, sempre visível); ao perder a vida ou concluir todos os níveis, entra um representante da **outra equipe**
+- Cada nível tem **5 perguntas com 4 alternativas** (A-D / 1-4) e cada professor **pergunta apenas o tema pelo qual é responsável** (Matemática, História, Geografia ou Biologia); o nível só é concluído **após responder as 5 perguntas**; há a opção **"Responder depois"** (a pergunta volta ao fim do nível)
+- Errar drena os corações; acertar soma pontos (10/15/20/30 conforme o nível), concedidos **uma única vez por pergunta** — mesmo após usar a dica, o acerto avança imediatamente
+- Ao fim de cada rodada, uma **tabela de andamento** mostra todas as rodadas disputadas (equipe, representante, nível, pontos e resultado)
+- O jogo entra em **tela cheia** automaticamente (alterne a qualquer momento com `F11`)
+- **Placar comparativo** durante todo o evento; vence a equipe que **avançar mais longe**, com a **pontuação como desempate**
+
+---
+
 ## 🚀 Tecnologias Utilizadas
 
 - **Linguagem:** Python 3.13+
@@ -61,6 +76,9 @@ janelas com vista para o exterior.
 | **Interagir / Ação** | `E` ou `Barra de Espaço` |
 | **Opções de Diálogo** | `W` / `S` ou `Setas Cima / Baixo` e `Enter` / `E` |
 | **Alternativas do Quiz** | `1`, `2`, `3`, `4` ou `A`, `B`, `C`, `D` ou **Clique do Mouse** |
+| **Responder depois (Competição)** | `R` ou **Clique do Mouse** |
+| **Música (pausar/retomar)** | `M` |
+| **Tela Cheia** | `F11` |
 | **Avançar / Tentar Novamente** | `Enter` ou `Espaço` |
 | **Fechar / Voltar** | `ESC` |
 
@@ -73,6 +91,7 @@ desafioEscolar/
 │
 ├── main.py                # Ponto de entrada do jogo e máquina de estados
 ├── requirements.txt       # Dependências do projeto (Pygame, PyOpenGL)
+├── music/tema.mp3         # Música de fundo do jogo (toca em loop)
 │
 ├── game/                  # Pacote principal com toda a lógica e engine do jogo
 │   ├── config.py          # Resolução (960x540), paleta de cores, constantes e dificuldades
@@ -83,7 +102,10 @@ desafioEscolar/
 │   ├── entities.py        # Entidades: Jogador (Player), Professor Roberto (NPC) e Objetos
 │   ├── quiz_data.py       # Banco de questões matemáticas (Fácil, Médio, Difícil)
 │   ├── ui.py              # Interface gráfica (tela de nome, HUD, diálogos, quiz e vitória)
-│   └── audio.py           # Efeitos sonoros sintetizados (passos, diálogos, acertos, fanfarra)
+│   ├── audio.py           # Efeitos sonoros sintetizados (passos, diálogos, acertos, fanfarra)
+│   ├── competition.py     # Modo Competição (equipes, revezamento, vidas e níveis)
+│   ├── competition_data.py# Banco de questões da competição (5 perguntas/4 alternativas por nível)
+│   └── ui_competition.py  # Telas do Modo Competição (menu, cadastro, quiz, placar e resultado)
 │
 └── tests/
     └── test_game.py       # Suíte de testes automatizados
