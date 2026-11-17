@@ -39,6 +39,7 @@ from game.config import (
     COMP_MAX_REPS,
 )
 from game.gl_renderer import GLRenderer
+from game.display import create_display
 from game.audio import sound_manager
 from game.assets import AssetManager
 from game.entities import Player
@@ -58,6 +59,7 @@ class DesafioEscolarGame:
         pygame.display.set_caption(TITLE)
         pygame.display.gl_set_attribute(pygame.GL_DOUBLEBUFFER, 1)
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.OPENGL | pygame.DOUBLEBUF)
+        self.fullscreen = False
         self.clock = pygame.time.Clock()
 
         self.gl = GLRenderer(WINDOW_WIDTH, WINDOW_HEIGHT)
@@ -106,25 +108,15 @@ class DesafioEscolarGame:
     # Tela cheia (requisito do Modo Competição; disponível a qualquer momento)
     # ------------------------------------------------------------------
     def is_fullscreen(self):
-        return bool(self.screen.get_flags() & pygame.FULLSCREEN)
+        # tela cheia sem bordas: a janela não tem a flag FULLSCREEN
+        return self.fullscreen
 
     def set_fullscreen(self, enabled):
         try:
-            # recria o subsistema de vídeo: sem isso o SDL reaproveita a
-            # janela antiga e ignora o tamanho pedido (causa da proporção
-            # distorcida ao alternar janela <-> tela cheia)
-            pygame.display.quit()
-            pygame.display.init()
-
-            if enabled:
-                # usa a resolução nativa do monitor: evita modos de vídeo
-                # exóticos (ex.: 960x540) que distorcem em alguns monitores
-                desktop_w, desktop_h = pygame.display.get_desktop_sizes()[0]
-                flags = pygame.OPENGL | pygame.DOUBLEBUF | pygame.FULLSCREEN
-                self.screen = pygame.display.set_mode((desktop_w, desktop_h), flags)
-            else:
-                flags = pygame.OPENGL | pygame.DOUBLEBUF
-                self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
+            # janela sem bordas do tamanho do monitor (capturável pelo OBS);
+            # ver game/display.py
+            self.screen = create_display(enabled)
+            self.fullscreen = enabled
 
             # a troca de modo recria o contexto GL: reconfigura o pipeline,
             # o viewport (letterbox 16:9) e regenera as texturas

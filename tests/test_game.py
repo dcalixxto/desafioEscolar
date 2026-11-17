@@ -18,6 +18,7 @@ from game.config import (
     DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL
 )
 from game.gl_renderer import GLRenderer
+from game.display import create_display
 from game.audio import sound_manager
 from game.assets import AssetManager
 from game.entities import Player
@@ -27,7 +28,7 @@ from game.ui import UIManager
 from game.competition import CompetitionManager
 from game.ui_competition import CompetitionUI
 from game.competition_data import COMPETITION_QUESTIONS, questions_per_level
-from game.config import COMP_MAX_REPS, SUBJECT_MATH, SUBJECT_BIOLOGY
+from game.config import COMP_MAX_REPS, SUBJECT_MATH, SUBJECT_BIOLOGY, TITLE
 
 
 def play_competition_run(comp, always_correct):
@@ -406,10 +407,12 @@ def run_automated_test():
     # 7. Tela cheia: a troca de modo recria o subsistema de vídeo, o pipeline
     #    GL, o viewport e as texturas (correção do crash e da proporção)
     dw, dh = pygame.display.get_desktop_sizes()[0]
-    pygame.display.quit()
-    pygame.display.init()
-    pygame.display.set_mode((dw, dh), pygame.OPENGL | pygame.DOUBLEBUF | pygame.FULLSCREEN)
-    assert (dw, dh) == pygame.display.get_surface().get_size(), "Tela cheia deveria usar a resolução nativa!"
+    surf = create_display(True)
+    assert (dw, dh) == surf.get_size(), "Tela cheia deveria usar a resolução nativa!"
+    # sem bordas (NOFRAME) e não exclusiva (FULLSCREEN): capturável pelo OBS
+    assert surf.get_flags() & pygame.NOFRAME, "Tela cheia deveria ser uma janela sem bordas!"
+    assert not surf.get_flags() & pygame.FULLSCREEN, "Tela cheia não deveria ser exclusiva!"
+    assert pygame.display.get_caption()[0] == TITLE, "A janela recriada deveria manter o título!"
     gl.reinit()
     gl.refresh_viewport()
     assets.rebuild()
@@ -422,9 +425,8 @@ def run_automated_test():
     print(f"[OK] Tela cheia na resolução nativa do monitor ({dw}x{dh}) renderizada sem crash.")
 
     # volta para modo janela
-    pygame.display.quit()
-    pygame.display.init()
-    pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.OPENGL | pygame.DOUBLEBUF)
+    surf = create_display(False)
+    assert surf.get_size() == (WINDOW_WIDTH, WINDOW_HEIGHT), "Modo janela deveria voltar a 960x540!"
     gl.reinit()
     gl.refresh_viewport()
     assets.rebuild()
