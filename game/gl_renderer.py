@@ -61,7 +61,10 @@ class GLRenderer:
         scale = min(w / float(self.width), h / float(self.height))
         vw = int(self.width * scale)
         vh = int(self.height * scale)
-        glViewport((w - vw) // 2, (h - vh) // 2, vw, vh)
+        # glViewport conta y a partir da base: a sobra ímpar fica embaixo, assim
+        # a imagem cola no topo (a tela cheia tem 1 linha extra fora da tela)
+        top = (h - vh) // 2
+        glViewport((w - vw) // 2, h - vh - top, vw, vh)
         self.viewport_scale = scale
 
     def logical_mouse_pos(self, pos=None):
@@ -77,8 +80,9 @@ class GLRenderer:
         if w == self.width and h == self.height:
             return mx, my
         scale = min(w / float(self.width), h / float(self.height))
-        vx = (w - self.width * scale) / 2.0
-        vy = (h - self.height * scale) / 2.0
+        # mesmos deslocamentos inteiros usados em refresh_viewport()
+        vx = (w - int(self.width * scale)) // 2
+        vy = (h - int(self.height * scale)) // 2
         return int((mx - vx) / scale), int((my - vy) / scale)
 
     def clear(self, color=COLOR_BG):

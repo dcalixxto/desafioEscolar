@@ -408,7 +408,9 @@ def run_automated_test():
     #    GL, o viewport e as texturas (correção do crash e da proporção)
     dw, dh = pygame.display.get_desktop_sizes()[0]
     surf = create_display(True)
-    assert (dw, dh) == surf.get_size(), "Tela cheia deveria usar a resolução nativa!"
+    # 1 linha a mais que o monitor: evita o congelamento da captura no OBS
+    assert (dw, dh + 1) == surf.get_size(), "Tela cheia deveria ter a resolução nativa + 1 linha!"
+    assert gl.logical_mouse_pos((0, 0)) == (0, 0), "Imagem deveria ficar colada no topo da tela!"
     # sem bordas (NOFRAME) e não exclusiva (FULLSCREEN): capturável pelo OBS
     assert surf.get_flags() & pygame.NOFRAME, "Tela cheia deveria ser uma janela sem bordas!"
     assert not surf.get_flags() & pygame.FULLSCREEN, "Tela cheia não deveria ser exclusiva!"

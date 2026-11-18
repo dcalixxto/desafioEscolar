@@ -39,7 +39,12 @@ def create_display(fullscreen):
     pygame.display.gl_set_attribute(pygame.GL_DOUBLEBUFFER, 1)
 
     if fullscreen:
-        # resolução nativa do monitor: o renderer aplica letterbox 16:9
-        size = pygame.display.get_desktop_sizes()[0]
-        return pygame.display.set_mode(size, BASE_FLAGS | pygame.NOFRAME)
+        # resolução nativa do monitor + 1 linha. Uma janela que cobre o
+        # monitor EXATAMENTE é promovida pelo Windows a apresentação direta
+        # ("independent flip"): o compositor para de receber os quadros e o
+        # OBS congela (só atualiza no Alt+Tab). Com 1 px a mais a promoção não
+        # acontece. A linha extra fica fora da tela, abaixo da borda inferior;
+        # o renderer cola a imagem no topo (ver GLRenderer.refresh_viewport).
+        desktop_w, desktop_h = pygame.display.get_desktop_sizes()[0]
+        return pygame.display.set_mode((desktop_w, desktop_h + 1), BASE_FLAGS | pygame.NOFRAME)
     return pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), BASE_FLAGS)
