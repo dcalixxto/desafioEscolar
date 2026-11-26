@@ -7,6 +7,7 @@ Equipe Pecê Gamer.
 import os
 import sys
 import ctypes
+from datetime import datetime
 import pygame
 from OpenGL.GL import *
 
@@ -33,6 +34,7 @@ _enable_high_dpi()
 from game.config import (
     WINDOW_WIDTH, WINDOW_HEIGHT, FPS, TITLE,
     STATE_MENU, STATE_NAME_INPUT, STATE_EXPLORE, STATE_DIALOG, STATE_QUIZ, STATE_VICTORY, STATE_GAME_OVER, STATE_LEADERBOARD,
+    STATE_RANKING,
     STATE_COMP_SETUP, STATE_COMP_REP_NAME, STATE_COMP_EXPLORE, STATE_COMP_DIALOG, STATE_COMP_QUIZ, STATE_COMP_TURN_END, STATE_COMP_RESULT,
     DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL, DIFF_DESAFIO,
     SUBJECTS, SUBJECTS_BY_DOOR, SUBJECT_MATH,
@@ -70,6 +72,7 @@ class DesafioEscolarGame:
         self.ui = UIManager(self.gl, self.assets, sound_manager)
         self.score = ScoreManager()
         self.leaderboard = Leaderboard()
+        self.ranking_players = []   # ranking geral carregado ao abrir a tela
         self.last_saved_session = None
 
         # Modo Competição (duas equipes, um representante por vez)
@@ -167,6 +170,28 @@ class DesafioEscolarGame:
         except Exception:
             pass
 
+    def save_competition_run(self):
+        """Registra a rodada encerrada do representante no ranking geral."""
+        run = self.comp.last_run
+        if not run:
+            return
+        try:
+            team_name = self.comp.team_names[run["team"]]
+            now = datetime.now().isoformat()
+            self.leaderboard.add_entry({
+                "nome_jogador": run.get("name") or f"{team_name} - Rep {run['rep']}",
+                "modo": "competicao",
+                "equipe": team_name,
+                "materia": self.comp.current_subject_name(),
+                "pontuacao": int(run["points"]),
+                "acertos": int(run["correct"]),
+                "erros": int(run["wrong"]),
+                "data": now,
+                "sessao": f"competicao-{now}",
+            })
+        except Exception:
+            pass
+
     def handle_student_game_over(self):
         # salva pontuacao e mostra opcoes para proximo aluno
         self.save_current_score("sem_coracoes")
@@ -219,6 +244,8 @@ class DesafioEscolarGame:
                 action = self.comp_ui.handle_menu_event(event)
                 if action == "CLASSIC":
                     sound_manager.play("blip")
+                    # os dois modos começam em tela cheia (F11 alterna)
+                    self.ensure_fullscreen()
                     self.state = STATE_NAME_INPUT
                 elif action == "COMPETITION":
                     sound_manager.play("door")
@@ -228,9 +255,20 @@ class DesafioEscolarGame:
                     self.comp_ui.team_name_input = ""
                     self.comp_ui._clear_overlays()
                     self.state = STATE_COMP_SETUP
+                elif action == "RANKING":
+                    sound_manager.play("blip")
+                    # como os dois modos, o ranking abre em tela cheia (F11 alterna)
+                    self.ensure_fullscreen()
+                    self.ranking_players = self.leaderboard.totals()
+                    self.ui.ranking_offset = 0
+                    self.state = STATE_RANKING
                 elif action == "QUIT":
                     self.running = False
                     return
+
+            elif self.state == STATE_RANKING:
+                if self.ui.handle_ranking_event(event, len(self.ranking_players)) == "BACK":
+                    self.state = STATE_MENU
 
             elif self.state == STATE_COMP_SETUP:
                 result = self.comp_ui.handle_setup_event(event)
@@ -322,6 +360,7 @@ class DesafioEscolarGame:
                         self.comp_ui.show_level_complete(self.comp)
                     elif flow == "TURN_END":
                         self.comp.end_turn()
+                        self.save_competition_run()
                         self.comp_ui._clear_overlays()
                         self.comp_ui.continue_button = None
                         self.state = STATE_COMP_TURN_END
@@ -383,7 +422,7 @@ class DesafioEscolarGame:
                         cfg["teacher"],
                         [
                             f"Sala de {cfg['name']}: desafios com progressão de dificuldade.",
-                            "- Comece no nível FÁCIL e desbloqueie MÉDIO e DIFÍCIL.",
+                            "- Comece no nível FÁCIL e desbloqueie MÉDIO, DIFÍCIL e DESAFIO.",
                             "- Ao errar, pode surgir um combate contra o Espírito da Dúvida.",
                             "- Acerte para causar dano; se sua energia acabar, revise e tente novamente."
                         ],
@@ -419,7 +458,6 @@ class DesafioEscolarGame:
                         elif is_correct:
                             pts = 10
                             if hasattr(self.quiz, 'current_difficulty'):
-                                from game.config import DIFF_MEDIO, DIFF_DIFICIL, DIFF_DESAFIO
                                 if self.quiz.current_difficulty == DIFF_MEDIO: pts = 15
                                 elif self.quiz.current_difficulty == DIFF_DIFICIL: pts = 20
                                 elif self.quiz.current_difficulty == DIFF_DESAFIO: pts = 30
@@ -429,15 +467,17 @@ class DesafioEscolarGame:
                         self.ui.start_quiz_feedback(is_correct, explanation)
                     elif result == "LEVEL_COMPLETE":
                         cfg = SUBJECTS[self.quiz.current_subject]
+                        next_level = {DIFF_FACIL: "Médio", DIFF_MEDIO: "Difícil",
+                                      DIFF_DIFICIL: "Desafio"}.get(self.quiz.current_difficulty, "próximo")
                         self.ui.show_dialog(
                             cfg["teacher"],
                             [
                                 f"Excelente trabalho, {self.player.name}!",
-                                f"Você concluiu um nível em {cfg['name']} e desbloqueou o próximo desafio.",
+                                f"Você concluiu um nível em {cfg['name']} e desbloqueou o nível {next_level}.",
                                 "Continue praticando para dominar todas as matérias!"
                             ],
                             options=[
-                                ("Continuar para o próximo nível", "START_QUIZ"),
+                                (f"Continuar para o nível {next_level}", "START_QUIZ"),
                                 ("Voltar a explorar a sala", "CLOSE")
                             ]
                         )
@@ -453,7 +493,7 @@ class DesafioEscolarGame:
                                 "Explore outras salas ou revise os exercícios quando quiser."
                             ],
                             options=[
-                                ("Revisar nível Difícil", "START_QUIZ"),
+                                ("Revisar nível Desafio", "START_QUIZ"),
                                 ("Voltar a explorar", "CLOSE")
                             ]
                         )
@@ -580,7 +620,7 @@ class DesafioEscolarGame:
                         "Deseja revisar os exercícios ou explorar outras salas?"
                     ],
                     options=[
-                        ("Revisar exercícios do nível Difícil", "START_QUIZ"),
+                        ("Revisar exercícios do nível Desafio", "START_QUIZ"),
                         ("Ver certificado da escola", "SHOW_CERT"),
                         ("Apenas passeando pela sala", "CLOSE")
                     ]
@@ -706,6 +746,9 @@ class DesafioEscolarGame:
         elif self.state == STATE_LEADERBOARD:
             entries = self.leaderboard.top(10)
             self.ui.draw_leaderboard_screen(entries)
+
+        elif self.state == STATE_RANKING:
+            self.ui.draw_ranking_screen(self.ranking_players)
 
 if __name__ == "__main__":
     game = DesafioEscolarGame()

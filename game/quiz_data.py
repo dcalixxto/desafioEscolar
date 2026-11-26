@@ -280,8 +280,8 @@ class QuizManager:
 
     def is_subject_completed(self, subject=None):
         sid = subject or self.current_subject
-        prog = self.progress[sid]["completed"]
-        return bool(prog.get(DIFF_DIFICIL, False) or prog.get(DIFF_DESAFIO, False))
+        # o Desafio é o último nível da progressão (como no Modo Competição)
+        return bool(self.progress[sid]["completed"].get(DIFF_DESAFIO, False))
 
     def is_game_completed(self):
         """Compatibilidade: considera matemática concluída como vitória principal."""

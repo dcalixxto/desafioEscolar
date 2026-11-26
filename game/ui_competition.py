@@ -92,24 +92,25 @@ class CompetitionUI:
     # ------------------------------------------------------------------
     # Menu inicial
     # ------------------------------------------------------------------
+    # ações das opções do menu, na ordem em que aparecem
+    MENU_ACTIONS = ["CLASSIC", "COMPETITION", "RANKING"]
+
     def handle_menu_event(self, event):
+        count = len(self.MENU_ACTIONS)
         if event.type == pygame.KEYDOWN:
-            if event.key in [pygame.K_UP, pygame.K_w, pygame.K_LEFT, pygame.K_a,
-                             pygame.K_TAB]:
-                self.menu_selected = 1 - self.menu_selected
+            if event.key in [pygame.K_UP, pygame.K_w, pygame.K_LEFT, pygame.K_a]:
+                self.menu_selected = (self.menu_selected - 1) % count
                 self.sound.play("blip")
-            elif event.key in [pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT, pygame.K_d]:
-                self.menu_selected = 1 - self.menu_selected
+            elif event.key in [pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT, pygame.K_d,
+                               pygame.K_TAB]:
+                self.menu_selected = (self.menu_selected + 1) % count
                 self.sound.play("blip")
             elif event.key in [pygame.K_RETURN, pygame.K_SPACE, pygame.K_e]:
                 self.sound.play("select")
-                return "COMPETITION" if self.menu_selected == 1 else "CLASSIC"
-            elif event.key == pygame.K_1:
+                return self.MENU_ACTIONS[self.menu_selected]
+            elif event.key in [pygame.K_1, pygame.K_2, pygame.K_3]:
                 self.sound.play("select")
-                return "CLASSIC"
-            elif event.key == pygame.K_2:
-                self.sound.play("select")
-                return "COMPETITION"
+                return self.MENU_ACTIONS[event.key - pygame.K_1]
             elif event.key == pygame.K_ESCAPE:
                 return "QUIT"
         elif event.type == pygame.MOUSEMOTION:
@@ -123,16 +124,13 @@ class CompetitionUI:
             for i, rect in enumerate(self._menu_rects()):
                 if rect.collidepoint(mx, my):
                     self.sound.play("select")
-                    return "COMPETITION" if i == 1 else "CLASSIC"
+                    return self.MENU_ACTIONS[i]
         return None
 
     def _menu_rects(self):
-        bw, bh = 480, 76
+        bw, bh = 480, 68
         bx = (WINDOW_WIDTH - bw) / 2
-        return [
-            pygame.Rect(bx, 250, bw, bh),
-            pygame.Rect(bx, 352, bw, bh),
-        ]
+        return [pygame.Rect(bx, 200 + i * 84, bw, bh) for i in range(len(self.MENU_ACTIONS))]
 
     def draw_menu(self, dt):
         self.cursor_timer += dt
@@ -146,6 +144,7 @@ class CompetitionUI:
         labels = [
             ("MODO CLÁSSICO", "Explore a escola, converse com os professores e evolua de nível."),
             ("MODO COMPETIÇÃO", "Duas equipes, um representante por vez. Quem avançar mais longe vence!"),
+            ("RANKING GERAL", "Pontuação total de todos os participantes, somando todas as partidas."),
         ]
         rects = self._menu_rects()
         for i, (title, desc) in enumerate(labels):
@@ -157,11 +156,11 @@ class CompetitionUI:
             border = COLOR_ACCENT if selected else COLOR_PRIMARY
             self.gl.draw_panel(rect.x, rect.y, rect.w, rect.h, bg, border_color=border,
                                border_width=3 if selected else 2, radius=14, shadow_offset=(3, 5))
-            self.gl.draw_text(title, rect.centerx, rect.y + 18, color=COLOR_WHITE, size=24, bold=True, center_x=True)
-            self.gl.draw_text(desc, rect.centerx, rect.y + 50, color=(170, 200, 235) if selected else COLOR_TEXT_MUTED, size=14, center_x=True)
+            self.gl.draw_text(title, rect.centerx, rect.y + 13, color=COLOR_WHITE, size=24, bold=True, center_x=True)
+            self.gl.draw_text(desc, rect.centerx, rect.y + 44, color=(170, 200, 235) if selected else COLOR_TEXT_MUTED, size=14, center_x=True)
 
-        self.gl.draw_text("[W/S] ou [Setas] escolher  •  [ENTER] selecionar  •  [1/2] atalho", WINDOW_WIDTH / 2, 468, color=COLOR_TEXT_MUTED, size=14, center_x=True)
-        self.gl.draw_text("[F11] alterna tela cheia", WINDOW_WIDTH / 2, 494, color=COLOR_TEXT_MUTED, size=13, center_x=True)
+        self.gl.draw_text("[W/S] ou [Setas] escolher  •  [ENTER] selecionar  •  [1/2/3] atalho", WINDOW_WIDTH / 2, 470, color=COLOR_TEXT_MUTED, size=14, center_x=True)
+        self.gl.draw_text("[F11] alterna tela cheia", WINDOW_WIDTH / 2, 496, color=COLOR_TEXT_MUTED, size=13, center_x=True)
 
     # ------------------------------------------------------------------
     # Cadastro das equipes

@@ -33,6 +33,7 @@ STATE_QUIZ = "QUIZ"
 STATE_VICTORY = "VICTORY"
 STATE_GAME_OVER = "GAME_OVER"
 STATE_LEADERBOARD = "LEADERBOARD"
+STATE_RANKING = "RANKING"           # ranking geral (pontuação total), aberto pelo menu
 
 # Modo Competição (duas equipes, um representante por vez)
 STATE_COMP_SETUP = "COMP_SETUP"     # cadastro dos nomes das equipes

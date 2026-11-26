@@ -41,4 +41,8 @@ class ScoreManager:
             "status_final": status,
             "genero": gender,
             "data": datetime.now().isoformat(),
+            "modo": "classico",
+            # identifica a partida: os registros da mesma partida são
+            # acumulados (o ranking geral conta só o último de cada sessão)
+            "sessao": self.started_at,
         }

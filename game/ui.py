@@ -11,7 +11,8 @@ from game.config import (
     COLOR_PRIMARY, COLOR_PRIMARY_DARK, COLOR_ACCENT, COLOR_ACCENT_DARK,
     COLOR_SUCCESS, COLOR_DANGER, COLOR_WHITE, COLOR_TEXT, COLOR_TEXT_MUTED,
     COLOR_BG_TOP, COLOR_BG_BOTTOM,
-    DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL, DIFF_DESAFIO, DIFFICULTY_LABELS, SUBJECTS
+    DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL, DIFF_DESAFIO, DIFFICULTY_LABELS, SUBJECTS,
+    SUBJECT_MATH
 )
 
 def _to_logical(pos):
@@ -35,6 +36,7 @@ class UIManager:
         self.gl = gl_renderer
         self.assets = assets
         self.sound = sound_manager
+        self.ranking_offset = 0   # primeira linha visível no ranking geral
 
         self.player_name_input = ""
         self.selected_gender = "masculino"  # masculino/feminino
@@ -62,11 +64,7 @@ class UIManager:
                 self.selected_gender = "feminino" if self.selected_gender == "masculino" else "masculino"
                 self.sound.play("blip")
             elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
-                name = self.player_name_input.strip()
-                if not name:
-                    name = "Estudante"
-                self.sound.play("blip")
-                return (name, self.selected_gender)
+                return self._confirm_name()
             elif event.key == pygame.K_BACKSPACE:
                 if len(self.player_name_input) > 0:
                     self.player_name_input = self.player_name_input[:-1]
@@ -76,7 +74,7 @@ class UIManager:
                     self.player_name_input += event.unicode
                     self.sound.play("blip")
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mx, my = _to_logical(pygame.mouse.get_pos())
+            mx, my = _to_logical(event.pos)
             pw, ph = 680, 420
             px = (WINDOW_WIDTH - pw) / 2
             py = (WINDOW_HEIGHT - ph) / 2
@@ -86,7 +84,21 @@ class UIManager:
                 self.selected_gender = "masculino"; self.sound.play("blip")
             elif frect.collidepoint(mx, my):
                 self.selected_gender = "feminino"; self.sound.play("blip")
+            elif self._play_button_rect().collidepoint(mx, my):
+                return self._confirm_name()
         return None
+
+    def _confirm_name(self):
+        """Confirma nome e personagem (ENTER ou clique no botão Jogar)."""
+        name = self.player_name_input.strip() or "Estudante"
+        self.sound.play("blip")
+        return (name, self.selected_gender)
+
+    def _play_button_rect(self):
+        pw, ph = 680, 420
+        px = (WINDOW_WIDTH - pw) / 2
+        py = (WINDOW_HEIGHT - ph) / 2
+        return pygame.Rect(px + 165, py + 340, 350, 36)
 
     def draw_name_input_screen(self, dt):
         self.cursor_timer += dt
@@ -125,8 +137,13 @@ class UIManager:
         self.gl.draw_text("Mulher", px + 435, py + 279, color=COLOR_WHITE, size=15, bold=True, center_x=True)
         self.gl.draw_text("[TAB/<- ->] alterna | clique para escolher", WINDOW_WIDTH / 2, py + 318, color=COLOR_TEXT_MUTED, size=13, center_x=True)
 
-        self.gl.draw_panel(px + 190, py + 340, 300, 36, COLOR_PRIMARY_DARK, border_color=COLOR_PRIMARY, border_width=1, radius=8, shadow_offset=(2, 3))
-        self.gl.draw_text("Pressione [ENTER] para Jogar", WINDOW_WIDTH / 2, py + 349, color=COLOR_WHITE, size=15, bold=True, center_x=True)
+        # botão Jogar: clicável, destacado quando o mouse está sobre ele
+        play = self._play_button_rect()
+        hover = play.collidepoint(*_to_logical(pygame.mouse.get_pos()))
+        self.gl.draw_panel(play.x, play.y, play.w, play.h, COLOR_PRIMARY if hover else COLOR_PRIMARY_DARK,
+                           border_color=COLOR_ACCENT if hover else COLOR_PRIMARY, border_width=2 if hover else 1,
+                           radius=8, shadow_offset=(2, 3))
+        self.gl.draw_text("Clique ou pressione [ENTER] para Jogar", WINDOW_WIDTH / 2, py + 349, color=COLOR_WHITE, size=15, bold=True, center_x=True)
         self.gl.draw_text("Você tem 3 corações. A cada erro, perde 1. Sem corações, sua pontuação é salva!", WINDOW_WIDTH / 2, py + 388, color=(255, 200, 200), size=13, center_x=True)
 
     def draw_exploration_hud(self, player_name, location_name, quiz_mgr, interactable, score_mgr=None):
@@ -268,8 +285,9 @@ class UIManager:
                     finished_level = quiz_mgr.advance_question()
                     if finished_level:
                         self.sound.play("levelup")
-                        # vitória geral de matemática abre certificado
-                        if quiz_mgr.is_game_completed():
+                        # vitória geral de matemática abre certificado (só ao
+                        # concluir a própria Matemática, não as outras matérias)
+                        if quiz_mgr.current_subject == SUBJECT_MATH and quiz_mgr.is_game_completed():
                             self.sound.play("fanfare")
                             return "VICTORY"
                         # se completou a matéria atual (nível difícil)
@@ -576,6 +594,71 @@ class UIManager:
         self.gl.draw_panel(px + 410, py + ph - 90, 270, 40, (60,50,40), border_color=COLOR_ACCENT, border_width=2, radius=10, shadow_offset=(2,3))
         self.gl.draw_text("[T] Ver Tabela Completa", px + 545, py + ph - 80, color=COLOR_WHITE, size=15, bold=True, center_x=True)
         self.gl.draw_text("[ESC] Voltar ao início", WINDOW_WIDTH/2, py + ph - 30, color=COLOR_TEXT_MUTED, size=13, center_x=True)
+
+    # ------------------------------------------------------------------
+    # Ranking geral (pontuação total por participante), aberto pelo menu
+    # ------------------------------------------------------------------
+    RANKING_ROWS = 10   # linhas visíveis; o restante é acessado rolando
+
+    def handle_ranking_event(self, event, total):
+        """Rolagem com setas/W-S/PgUp-PgDn/roda do mouse. Retorna "BACK" ao sair."""
+        max_offset = max(0, total - self.RANKING_ROWS)
+        step = 0
+        if event.type == pygame.KEYDOWN:
+            if event.key in [pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE, pygame.K_BACKSPACE]:
+                self.sound.play("blip")
+                return "BACK"
+            step = {pygame.K_UP: -1, pygame.K_w: -1, pygame.K_DOWN: 1, pygame.K_s: 1,
+                    pygame.K_PAGEUP: -self.RANKING_ROWS,
+                    pygame.K_PAGEDOWN: self.RANKING_ROWS}.get(event.key, 0)
+        elif event.type == pygame.MOUSEWHEEL:
+            step = -event.y
+        if step:
+            self.ranking_offset = max(0, min(max_offset, self.ranking_offset + step))
+        return None
+
+    def draw_ranking_screen(self, players):
+        self.gl.clear((18, 22, 34))
+        self.gl.draw_vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, (28, 36, 54), (12, 16, 24))
+        self.gl.draw_vignette(70)
+        pw, ph = 860, 492
+        px = (WINDOW_WIDTH - pw) / 2
+        py = (WINDOW_HEIGHT - ph) / 2
+        self.gl.draw_panel(px, py, pw, ph, (24, 30, 46, 248), border_color=COLOR_ACCENT, border_width=3, radius=16, shadow_offset=(4, 5))
+        self.gl.draw_text("RANKING GERAL", WINDOW_WIDTH / 2, py + 20, color=COLOR_ACCENT, size=26, bold=True, center_x=True)
+        self.gl.draw_text("Pontuação total de cada participante, somando todas as partidas jogadas",
+                          WINDOW_WIDTH / 2, py + 54, color=COLOR_TEXT_MUTED, size=13, center_x=True)
+
+        # colunas: (título, x relativo ao painel, alinhado à direita?)
+        cols = [("Pos", 30, False), ("Participante", 84, False), ("Pontos", 410, True),
+                ("Partidas", 505, True), ("Acertos", 590, True), ("Erros", 655, True),
+                ("Modo", 685, False)]
+        hy = py + 84
+        for title, cx, right in cols:
+            x = px + cx - (self.gl.measure_text(title, size=14, bold=True)[0] if right else 0)
+            self.gl.draw_text(title, x, hy, color=(180, 210, 255), size=14, bold=True)
+        self.gl.draw_rect(px + 24, hy + 22, pw - 48, 2, (70, 90, 120))
+
+        start = min(self.ranking_offset, max(0, len(players) - self.RANKING_ROWS))
+        y = hy + 34
+        medal = [COLOR_ACCENT, (205, 210, 220), (214, 150, 90)]   # ouro, prata, bronze
+        for i, p in enumerate(players[start:start + self.RANKING_ROWS], start=start):
+            col = medal[i] if i < 3 else (220, 225, 235)
+            values = [f"{i + 1}.", str(p['nome'])[:26], str(p['pontuacao']), str(p['partidas']),
+                      str(p['acertos']), str(p['erros']), p['modos']]
+            for (title, cx, right), text in zip(cols, values):
+                size = 13 if title == "Modo" else 15
+                x = px + cx - (self.gl.measure_text(text, size=size, bold=i < 3)[0] if right else 0)
+                self.gl.draw_text(text, x, y, color=col, size=size, bold=i < 3)
+            y += 31
+
+        if not players:
+            self.gl.draw_text("Nenhuma partida registrada ainda.", WINDOW_WIDTH / 2, py + 220, color=COLOR_TEXT_MUTED, size=16, center_x=True)
+        elif len(players) > self.RANKING_ROWS:
+            last = min(len(players), start + self.RANKING_ROWS)
+            self.gl.draw_text(f"{start + 1}–{last} de {len(players)} participantes  •  [↑/↓] ou roda do mouse para rolar",
+                              WINDOW_WIDTH / 2, py + ph - 52, color=COLOR_TEXT_MUTED, size=13, center_x=True)
+        self.gl.draw_text("[ESC/ENTER] Voltar ao menu", WINDOW_WIDTH / 2, py + ph - 28, color=COLOR_TEXT_MUTED, size=13, center_x=True)
 
     def draw_leaderboard_screen(self, entries):
         self.gl.clear((18, 22, 34))

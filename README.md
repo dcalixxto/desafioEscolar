@@ -22,7 +22,7 @@
 Para isso, ele deve explorar os corredores e salas da instituição. Neste momento inicial, a **Sala de Matemática** está aberta e o professor aguarda para aplicar avaliações progressivas de conhecimento. As demais salas temáticas (**História**, **Geografia** e **Biologia**) exibem placas indicando que serão inauguradas em breve.
 
 ### 🌟 Mecânica de Progressão de Quiz
-O jogador inicia obrigatoriamente no nível **Fácil**. Ao responder corretamente aos problemas matemáticos propostos pelo professor, o cadeado do nível **Médio** se abre; completando o Médio, o nível **Difícil** é desbloqueado. Ao vencer o nível Difícil, o jogador alcança a condição de vitória e recebe seu **Certificado de Excelência Acadêmica**!
+O jogador inicia obrigatoriamente no nível **Fácil**. Ao responder corretamente aos problemas matemáticos propostos pelo professor, o cadeado do nível **Médio** se abre; completando o Médio, o nível **Difícil** é desbloqueado; vencendo o Difícil, abre-se o nível final **Desafio**. A matéria só é concluída ao vencer o Desafio; em Matemática, isso dá a condição de vitória e o **Certificado de Excelência Acadêmica**!
 
 Errar uma questão não impõe *Game Over* punitivo: o professor apresenta uma explicação didática e convida o estudante a *"Estudar mais um pouco"* e tentar novamente.
 
@@ -78,7 +78,8 @@ No menu inicial, escolha **Modo Competição** para o formato de evento entre du
 | **Alternativas do Quiz** | `1`, `2`, `3`, `4` ou `A`, `B`, `C`, `D` ou **Clique do Mouse** |
 | **Responder depois (Competição)** | `R` ou **Clique do Mouse** |
 | **Música (pausar/retomar)** | `M` |
-| **Tela Cheia** | `F11` |
+| **Tela Cheia** | `F11` (os dois modos já começam em tela cheia) |
+| **Ranking Geral** | Menu inicial → `3` (pontuação total de cada participante; `↑/↓` ou roda do mouse rolam) |
 | **Avançar / Tentar Novamente** | `Enter` ou `Espaço` |
 | **Fechar / Voltar** | `ESC` |
 

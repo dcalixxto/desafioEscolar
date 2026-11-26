@@ -5,6 +5,7 @@ Simula a jornada completa do jogador sem requerer entrada manual.
 
 import os
 import sys
+import tempfile
 import pygame
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -15,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from game.config import (
     WINDOW_WIDTH, WINDOW_HEIGHT,
     STATE_NAME_INPUT, STATE_EXPLORE, STATE_DIALOG, STATE_QUIZ, STATE_VICTORY,
-    DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL
+    DIFF_FACIL, DIFF_MEDIO, DIFF_DIFICIL, DIFF_DESAFIO
 )
 from game.gl_renderer import GLRenderer
 from game.display import create_display
@@ -28,7 +29,9 @@ from game.ui import UIManager
 from game.competition import CompetitionManager
 from game.ui_competition import CompetitionUI
 from game.competition_data import COMPETITION_QUESTIONS, questions_per_level
-from game.config import COMP_MAX_REPS, SUBJECT_MATH, SUBJECT_BIOLOGY, TITLE
+from game.config import COMP_MAX_REPS, SUBJECT_MATH, SUBJECT_BIOLOGY, SUBJECT_HISTORY, TITLE
+from game.leaderboard import Leaderboard
+from game.scoring import ScoreManager
 
 
 def play_competition_run(comp, always_correct):
@@ -222,6 +225,116 @@ def run_competition_tests(gl, comp_ui):
     print("[OK] Tela de resultado final renderizada.")
 
 
+def run_ranking_tests(gl, ui, comp_ui):
+    """Ranking geral do menu: soma por participante sem contar a mesma partida duas vezes."""
+    print("\n--- Testando o Ranking Geral ---")
+    tmp_dir = tempfile.mkdtemp()
+    lb = Leaderboard(os.path.join(tmp_dir, "ranking.json"))
+
+    # partida clássica com dois registros acumulados (vitória e depois sem corações)
+    score = ScoreManager()
+    score.add_correct(10)
+    lb.add_entry(score.snapshot("Ana", "Matemática"))
+    score.add_correct(20)
+    score.add_wrong()
+    lb.add_entry(score.snapshot("Ana", "História"))
+    # segunda partida da mesma pessoa (nome digitado com outra caixa)
+    score.reset()
+    score.add_correct(15)
+    lb.add_entry(score.snapshot("ana ", "Geografia"))
+    # registros antigos, sem "sessao": dois acumulados de uma partida + outra pessoa
+    lb.add_entry({"nome_jogador": "Bia", "pontuacao": 40, "acertos": 4, "erros": 0, "data": "2026-11-25T10:00:00"})
+    lb.add_entry({"nome_jogador": "Bia", "pontuacao": 55, "acertos": 5, "erros": 1, "data": "2026-11-25T10:05:00"})
+    # rodada da competição
+    lb.add_entry({"nome_jogador": "Ana", "modo": "competicao", "pontuacao": 100, "acertos": 7,
+                  "erros": 3, "data": "2026-11-25T11:00:00", "sessao": "competicao-1"})
+
+    totals = {p["nome"].casefold().strip(): p for p in lb.totals()}
+    ana, bia = totals["ana"], totals["bia"]
+    assert ana["pontuacao"] == 30 + 15 + 100, f"Ana deveria somar 145 pontos, somou {ana['pontuacao']}!"
+    assert ana["partidas"] == 3 and ana["modos"] == "Clássico e Competição"
+    assert bia["pontuacao"] == 55 and bia["partidas"] == 1, "Registros antigos acumulados contaram em dobro!"
+    assert lb.totals()[0]["pontuacao"] == 145, "Ranking deveria estar ordenado pela pontuação total!"
+    assert all(e.get("modo") != "competicao" for e in lb.top(10)), \
+        "O ranking de sessões (por nota) não deveria listar rodadas da competição!"
+    print("[OK] Ranking geral: pontuação total por participante, sem contar a mesma partida duas vezes.")
+
+    # menu com 3 opções: Clássico, Competição e Ranking
+    key = lambda k: pygame.event.Event(pygame.KEYDOWN, key=k, mod=0, unicode="")
+    assert comp_ui.handle_menu_event(key(pygame.K_3)) == "RANKING", "Atalho [3] deveria abrir o ranking!"
+    comp_ui.menu_selected = 0
+    comp_ui.handle_menu_event(key(pygame.K_UP))
+    assert comp_ui.menu_selected == 2, "Seta para cima na 1ª opção deveria ir para a última!"
+    gl.clear()
+    comp_ui.draw_menu(0.016)
+    pygame.display.flip()
+    print("[OK] Menu inicial com a opção Ranking Geral.")
+
+    # botão "Jogar" da tela de nome é clicável (além do ENTER)
+    ui.player_name_input = "Carla"
+    # janela 960x540: posição física = lógica
+    click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=ui._play_button_rect().center)
+    assert ui.handle_name_input_event(click) == ("Carla", ui.selected_gender), \
+        "Clicar no botão Jogar deveria confirmar o nome!"
+    ui.player_name_input = ""
+    print("[OK] Botão 'Jogar' da tela de nome aceita clique do mouse.")
+
+    # tela do ranking com mais participantes que as linhas visíveis + rolagem
+    players = [{"nome": f"Aluno {i}", "pontuacao": 300 - i, "partidas": 1, "acertos": 10,
+                "erros": 1, "modos": "Clássico", "data": ""} for i in range(25)]
+    ui.ranking_offset = 0
+    ui.handle_ranking_event(key(pygame.K_PAGEDOWN), len(players))
+    ui.handle_ranking_event(key(pygame.K_PAGEDOWN), len(players))
+    assert ui.ranking_offset == 15, "A rolagem deveria parar na última página!"
+    assert ui.handle_ranking_event(key(pygame.K_ESCAPE), len(players)) == "BACK"
+    gl.clear()
+    ui.draw_ranking_screen(players)
+    pygame.display.flip()
+    gl.clear()
+    ui.draw_ranking_screen([])
+    pygame.display.flip()
+    print("[OK] Tela do Ranking Geral renderizada (com rolagem e vazia).")
+
+
+def run_main_flow_tests():
+    """Joga o Modo Clássico pelo main.py real, enviando teclas como o jogador:
+    em todas as matérias e níveis, erra uma vez e acerta cada pergunta até
+    concluir o nível. Pega erros que só aparecem no fluxo do main.py (ex.:
+    o crash ao concluir o último nível de História)."""
+    print("\n--- Testando o fluxo real do Modo Clássico (main.py) ---")
+    import main as game_main
+
+    game = game_main.DesafioEscolarGame()
+    game.leaderboard = Leaderboard(os.path.join(tempfile.mkdtemp(), "ranking.json"))
+
+    def press(k):
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=k, mod=0, unicode="", scancode=0))
+        game.handle_events()
+        game.update(1 / 60)
+        game.render(1 / 60)
+
+    answer_keys = [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4]
+    for subject, levels in ALL_QUESTIONS.items():
+        game.quiz = QuizManager(subject)
+        for level, questions in levels.items():
+            game.score.reset()   # corações cheios a cada nível
+            game.last_dialog_subject = subject
+            game.quiz.unlocked_levels[level] = True
+            game.quiz.start_level(level)
+            game.ui.feedback_active = False
+            game.state = STATE_QUIZ
+            for i, q in enumerate(questions):
+                if i == 0:   # um erro por nível: dica + nova tentativa
+                    press(answer_keys[(q["correct_index"] + 1) % 4])
+                    press(pygame.K_RETURN)
+                press(answer_keys[q["correct_index"]])
+                press(pygame.K_RETURN)
+            assert game.quiz.completed_levels[level], f"{subject}/{level} deveria estar concluído!"
+            assert game.state in (STATE_DIALOG, STATE_VICTORY), \
+                f"{subject}/{level}: fim do nível deveria abrir diálogo ou vitória, ficou em {game.state}"
+    print("[OK] 4 matérias x 4 níveis jogados pelo main.py: erro, dica, acertos e fim de nível sem crash.")
+
+
 def run_automated_test():
     print("=== INICIANDO TESTE DO JOGO 'O DESAFIO ESCOLAR' ===")
     
@@ -340,8 +453,37 @@ def run_automated_test():
         quiz.advance_question()
 
     assert quiz.completed_levels[DIFF_DIFICIL] == True, "Nível Difícil deveria estar concluído!"
+    assert quiz.unlocked_levels[DIFF_DESAFIO] == True, "Nível Desafio deveria ter sido desbloqueado!"
+    assert quiz.is_game_completed() == False, "A vitória só deveria vir após o nível Desafio!"
+    print("[OK] Nível Difícil concluído! Nível Desafio desbloqueado com sucesso! 🔓")
+
+    # Inicia nível Desafio (último nível da progressão no modo clássico)
+    quiz.start_level(DIFF_DESAFIO)
+    while quiz.in_quiz:
+        q = quiz.get_current_question()
+        is_correct, exp = quiz.answer_question(q["correct_index"])
+        assert is_correct == True
+        print(f"  [Acerto Desafio] Q{quiz.current_question_idx + 1}: {q['title']}")
+        quiz.advance_question()
+
+    assert quiz.completed_levels[DIFF_DESAFIO] == True, "Nível Desafio deveria estar concluído!"
     assert quiz.is_game_completed() == True, "Jogo deveria estar marcado como completado!"
-    print("[OK] Nível Difícil concluído! Condição de vitória alcançada!")
+    print("[OK] Nível Desafio concluído! Condição de vitória alcançada!")
+
+    # Regressão: com Matemática já vencida, concluir um nível de OUTRA matéria
+    # não pode reabrir a tela de vitória de Matemática
+    quiz.set_subject(SUBJECT_HISTORY)
+    quiz.start_level(DIFF_FACIL)
+    while quiz.current_question_idx < quiz.total_questions_in_level() - 1:
+        quiz.answer_question(quiz.get_current_question()["correct_index"])
+        quiz.advance_question()
+    quiz.answer_question(quiz.get_current_question()["correct_index"])
+    ui.feedback_active, ui.feedback_correct = True, True
+    enter = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN, mod=0, unicode="\r")
+    result = ui.handle_quiz_event(enter, quiz)
+    assert result == "LEVEL_COMPLETE", f"Nível de História deveria dar LEVEL_COMPLETE, deu {result}!"
+    quiz.set_subject(SUBJECT_MATH)
+    print("[OK] Concluir nível de outra matéria após vencer Matemática não reabre a vitória.")
 
     # 4b. Regressão do bug de dicas/pontos duplicados: errar -> dica -> acertar
     #     deve avançar de vez, com pontuação concedida UMA única vez.
@@ -403,6 +545,7 @@ def run_automated_test():
     # 6. Modo Competição (lógica e telas)
     comp_ui = CompetitionUI(gl, assets, sound_manager)
     run_competition_tests(gl, comp_ui)
+    run_ranking_tests(gl, ui, comp_ui)
 
     # 7. Tela cheia: a troca de modo recria o subsistema de vídeo, o pipeline
     #    GL, o viewport e as texturas (correção do crash e da proporção)
@@ -436,6 +579,9 @@ def run_automated_test():
     comp_ui.draw_menu(0.016)
     pygame.display.flip()
     print("[OK] Retorno para modo janela renderizado sem crash.")
+
+    # por último: cria o jogo completo (nova janela e contexto OpenGL)
+    run_main_flow_tests()
 
     pygame.quit()
     print("\n=== TODOS OS TESTES PASSARAM COM 100% DE SUCESSO! ===")
